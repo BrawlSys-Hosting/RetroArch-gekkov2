@@ -25,6 +25,15 @@
 #include "../../gekkonet/linux/include/gekkonet.h"
 #endif
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#endif
+
 /* ------------------------------------------------------------------------- */
 /* MITM server table retained for UI compatibility. */
 const mitm_server_t netplay_mitm_server_list[NETPLAY_MITM_SERVERS] = {
@@ -44,6 +53,7 @@ typedef struct gekko_netplay_state
    GekkoConfig        config;
    int                local_handle;
    int                remote_handle;
+   GekkoNetAddress    remote_addr;
    unsigned short     listen_port;
    bool               is_server;
    bool               running;
@@ -61,15 +71,62 @@ net_driver_state_t *networking_state_get_ptr(void)
    return &networking_driver_st;
 }
 
+static void gekkonet_free_remote_addr(void)
+{
+   if (g_gekkonet.remote_addr.data)
+      free(g_gekkonet.remote_addr.data);
+
+   g_gekkonet.remote_addr.data = NULL;
+   g_gekkonet.remote_addr.size = 0;
+}
+
 static void gekkonet_reset_state(void)
 {
+   gekkonet_free_remote_addr();
    memset(&g_gekkonet, 0, sizeof(g_gekkonet));
+}
+
+static bool gekkonet_resolve_remote(const char *server, unsigned port)
+{
+   char port_buf[16];
+   struct addrinfo hints;
+   struct addrinfo *res = NULL;
+
+   if (!server || string_is_empty(server))
+      return false;
+
+   snprintf(port_buf, sizeof(port_buf), "%u", port);
+
+   memset(&hints, 0, sizeof(hints));
+   hints.ai_family   = AF_UNSPEC;
+   hints.ai_socktype = SOCK_DGRAM;
+
+   if (getaddrinfo(server, port_buf, &hints, &res) != 0 || !res)
+   {
+      RARCH_ERR("[GekkoNet] Failed to resolve remote host '%s:%u'.\n", server, port);
+      if (res)
+         freeaddrinfo(res);
+      return false;
+   }
+
+   g_gekkonet.remote_addr.data = malloc(res->ai_addrlen);
+   if (!g_gekkonet.remote_addr.data)
+   {
+      RARCH_ERR("[GekkoNet] Failed to allocate remote address buffer.\n");
+      freeaddrinfo(res);
+      return false;
+   }
+
+   memcpy(g_gekkonet.remote_addr.data, res->ai_addr, res->ai_addrlen);
+   g_gekkonet.remote_addr.size = (unsigned int)res->ai_addrlen;
+
+   freeaddrinfo(res);
+   return true;
 }
 
 static bool gekkonet_init_session(bool is_server, const char *server, unsigned port)
 {
    settings_t *settings = config_get_ptr();
-   (void)server;
 
    gekkonet_reset_state();
 
@@ -110,8 +167,14 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    }
    else
    {
-      /* Client connects to host; address will be learned via adapter */
-      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer, NULL);
+      if (!gekkonet_resolve_remote(server, port))
+      {
+         RARCH_ERR("[GekkoNet] Unable to resolve remote host for client session.\n");
+         return false;
+      }
+
+      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer,
+            &g_gekkonet.remote_addr);
    }
 
    gekko_start(g_gekkonet.session, &g_gekkonet.config);
@@ -130,6 +193,8 @@ static void gekkonet_shutdown(void)
 
    if (g_gekkonet.session)
       gekko_destroy(g_gekkonet.session);
+
+   gekkonet_free_remote_addr();
 
    gekkonet_reset_state();
 }
@@ -193,6 +258,7 @@ bool init_netplay_discovery(void)
 {
    return false;
 }
+#endif
 
 void deinit_netplay_discovery(void)
 {
@@ -229,41 +295,6 @@ bool netplay_decode_hostname(const char *hostname,
       strlcpy(address, hostname, (size_t)(colon - hostname + 1));
       *port = (unsigned)strtoul(colon + 1, NULL, 10);
    }
-   else
-   {
-      strlcpy(address, hostname, len);
-      *port = 55435; /* default */
-   }
-
-   if (session)
-      strlcpy(session, "", len);
-
-   return true;
-}
-
-int netplay_rooms_get_count(void)
-{
-   net_driver_state_t *net_st = networking_state_get_ptr();
-   if (!net_st || !net_st->rooms_data)
-      return 0;
-   return net_st->room_count;
-}
-
-struct netplay_room *netplay_room_get(int index)
-{
-   net_driver_state_t *net_st = networking_state_get_ptr();
-   struct netplay_room *room  = NULL;
-   int i                      = 0;
-
-   if (!net_st || !net_st->rooms_data)
-      return NULL;
-
-   room = net_st->rooms_data->head;
-   while (room && i < index)
-   {
-      room = room->next;
-      i++;
-   }
 
    return room;
 }
@@ -273,21 +304,19 @@ void netplay_rooms_free(void)
    net_driver_state_t *net_st = networking_state_get_ptr();
    if (net_st)
    {
-      struct netplay_room *room = NULL;
-      if (net_st->rooms_data)
-      {
-         room = net_st->rooms_data->head;
-         while (room)
-         {
-            struct netplay_room *next = room->next;
-            free(room);
-            room = next;
-         }
-         free(net_st->rooms_data);
-      }
-      net_st->rooms_data = NULL;
-      net_st->room_count = 0;
+      strlcpy(address, hostname, len);
+      *port = 55435; /* default */
    }
+}
+
+   if (session)
+      strlcpy(session, "", len);
+
+   strlcpy(net_st->server_address_deferred, server ? server : "", sizeof(net_st->server_address_deferred));
+   net_st->server_port_deferred = port;
+   net_st->flags               |= (1 << 0);
+
+   return true;
 }
 
 bool init_netplay_deferred(const char *server, unsigned port,
