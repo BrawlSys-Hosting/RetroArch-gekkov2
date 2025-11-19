@@ -2354,12 +2354,22 @@ ifeq ($(HAVE_NETWORKING), 1)
    ifneq ($(findstring Win32,$(OS)),)
       LIBS += -lws2_32 -liphlpapi
    endif
-
+   
    # Netplay
    DEFINES += -DHAVE_NETWORK_CMD
+   ifneq ($(findstring Win32,$(OS)),)
+      INCLUDE_DIRS += -I$(CURDIR)/gekkonet/windows/include
+      LIBS += $(CURDIR)/gekkonet/windows/lib/libGekkoNet_STATIC.a
+   else ifneq ($(findstring Darwin,$(OS)),)
+      INCLUDE_DIRS += -I$(CURDIR)/gekkonet/mac/include
+      LIBS += $(CURDIR)/gekkonet/mac/lib/libGekkoNet_STATIC.a
+   else
+      INCLUDE_DIRS += -I$(CURDIR)/gekkonet/linux/include
+      LIBS += $(CURDIR)/gekkonet/linux/lib/libGekkoNet_STATIC.a
+   endif
    OBJ += \
-	  network/netplay/netplay_frontend.o \
-	  network/netplay/netplay_room_parse.o
+          network/netplay/netplay_frontend.o \
+          network/netplay/netplay_room_parse.o
 
    # RetroAchievements
    ifeq ($(HAVE_CHEEVOS), 1)
