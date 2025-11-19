@@ -146,8 +146,10 @@ static void gfx_ctx_uwp_get_video_size(void *data,
    if (is_running_on_xbox())
    {
       /* Match the output res to the display resolution */
-      width    = uwp_get_width();
-      height   = uwp_get_height();
+      if (width)
+         *width  = uwp_get_width();
+      if (height)
+         *height = uwp_get_height();
    }
 }
 
