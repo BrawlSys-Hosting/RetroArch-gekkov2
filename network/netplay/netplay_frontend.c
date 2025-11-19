@@ -292,18 +292,33 @@ bool netplay_decode_hostname(const char *hostname,
    const char *colon = strchr(hostname, ':');
    if (colon)
    {
-      strlcpy(address, hostname, (size_t)(colon - hostname + 1));
+      size_t address_len = (size_t)(colon - hostname);
+      if (address_len >= len)
+         address_len = len ? len - 1 : 0;
+
+      if (len && address_len > 0)
+      {
+         memcpy(address, hostname, address_len);
+         address[address_len] = '\0';
+      }
+      else if (len)
+         address[0] = '\0';
+
       *port = (unsigned)strtoul(colon + 1, NULL, 10);
    }
    else
    {
-      strlcpy(address, hostname, len);
+      if (len)
+         strlcpy(address, hostname, len);
       *port = 55435; /* default */
    }
 }
 
    if (session)
-      strlcpy(session, "", len);
+   {
+      if (len)
+         session[0] = '\0';
+   }
 
    return true;
 }
