@@ -287,7 +287,7 @@ bool netplay_compatible_version(const char *version)
 }
 
 bool netplay_decode_hostname(const char *hostname,
-      char *address, unsigned *port, char *session, size_t len)
+      char *address, unsigned *port, char *session_name, size_t len)
 {
    const char *colon;
    size_t address_len = 0;
@@ -320,10 +320,10 @@ bool netplay_decode_hostname(const char *hostname,
    }
 }
 
-   if (session)
+   if (session_name)
    {
       if (len)
-         session[0] = '\0';
+         session_name[0] = '\0';
    }
 
    return true;
