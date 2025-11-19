@@ -258,6 +258,7 @@ bool init_netplay_discovery(void)
 {
    return false;
 }
+#endif
 
 void deinit_netplay_discovery(void)
 {
@@ -294,14 +295,26 @@ bool netplay_decode_hostname(const char *hostname,
       strlcpy(address, hostname, (size_t)(colon - hostname + 1));
       *port = (unsigned)strtoul(colon + 1, NULL, 10);
    }
-   else
+
+   return room;
+}
+
+void netplay_rooms_free(void)
+{
+   net_driver_state_t *net_st = networking_state_get_ptr();
+   if (net_st)
    {
       strlcpy(address, hostname, len);
       *port = 55435; /* default */
    }
+}
 
    if (session)
       strlcpy(session, "", len);
+
+   strlcpy(net_st->server_address_deferred, server ? server : "", sizeof(net_st->server_address_deferred));
+   net_st->server_port_deferred = port;
+   net_st->flags               |= (1 << 0);
 
    return true;
 }
