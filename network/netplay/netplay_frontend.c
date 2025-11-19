@@ -261,6 +261,7 @@ bool init_netplay_discovery(void)
 {
    return false;
 }
+#endif
 
 void deinit_netplay_discovery(void)
 {
@@ -317,6 +318,7 @@ bool netplay_decode_hostname(const char *hostname,
          strlcpy(address, hostname, len);
       *port = 55435; /* default */
    }
+}
 
    if (session)
    {
