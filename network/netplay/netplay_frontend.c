@@ -152,7 +152,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.config.input_prediction_window = 2;
    g_gekkonet.config.spectator_delay         = 0;
    g_gekkonet.config.input_size              = sizeof(uint16_t) * 2;
-   g_gekkonet.config.state_size              = settings->ints.rewind_buffer_size * 1024;
+   g_gekkonet.config.state_size              = (unsigned)(settings->sizes.rewind_buffer_size * 1024);
    g_gekkonet.config.limited_saving          = false;
    g_gekkonet.config.post_sync_joining       = false;
    g_gekkonet.config.desync_detection        = true;
@@ -295,14 +295,7 @@ bool netplay_decode_hostname(const char *hostname,
       strlcpy(address, hostname, (size_t)(colon - hostname + 1));
       *port = (unsigned)strtoul(colon + 1, NULL, 10);
    }
-
-   return room;
-}
-
-void netplay_rooms_free(void)
-{
-   net_driver_state_t *net_st = networking_state_get_ptr();
-   if (net_st)
+   else
    {
       strlcpy(address, hostname, len);
       *port = 55435; /* default */
@@ -311,10 +304,6 @@ void netplay_rooms_free(void)
 
    if (session)
       strlcpy(session, "", len);
-
-   strlcpy(net_st->server_address_deferred, server ? server : "", sizeof(net_st->server_address_deferred));
-   net_st->server_port_deferred = port;
-   net_st->flags               |= (1 << 0);
 
    return true;
 }
@@ -343,7 +332,7 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
    if (g_gekkonet.running)
       return true;
 
-   networking_driver_st.data = &g_gekkonet;
+   networking_driver_st.data = (netplay_t*)&g_gekkonet;
 
    return gekkonet_init_session(server == NULL || string_is_empty(server), server, port);
 }
@@ -392,14 +381,14 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
       case RARCH_NETPLAY_CTL_ENABLE_SERVER:
       {
          settings_t *settings = config_get_ptr();
-         ret = init_netplay(NULL, settings->uints.netplay_ip_port, NULL);
+         ret = init_netplay(NULL, settings->uints.netplay_port, NULL);
          break;
       }
       case RARCH_NETPLAY_CTL_ENABLE_CLIENT:
       {
          settings_t *settings = config_get_ptr();
-         ret = init_netplay(settings->paths.netplay_ip_address,
-               settings->uints.netplay_ip_port, settings->paths.netplay_password);
+         ret = init_netplay(settings->paths.netplay_server,
+               settings->uints.netplay_port, settings->paths.netplay_password);
          break;
       }
       case RARCH_NETPLAY_CTL_DISABLE:
