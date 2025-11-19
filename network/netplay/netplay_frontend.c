@@ -228,13 +228,16 @@ static void gekkonet_push_local_input(void)
 
 static void gekkonet_poll(void)
 {
+   int i                 = 0;
+   int event_count       = 0;
+   GekkoGameEvent **events;
+
    gekko_network_poll(g_gekkonet.session);
 
    /* drain events to keep session progressing */
-   int event_count          = 0;
-   GekkoGameEvent **events  = gekko_update_session(g_gekkonet.session, &event_count);
+   events = gekko_update_session(g_gekkonet.session, &event_count);
 
-   for (int i = 0; i < event_count; i++)
+   for (i = 0; i < event_count; i++)
    {
       GekkoGameEvent *evt = events[i];
       switch (evt->type)
@@ -286,24 +289,42 @@ bool netplay_compatible_version(const char *version)
 bool netplay_decode_hostname(const char *hostname,
       char *address, unsigned *port, char *session, size_t len)
 {
+   const char *colon;
+   size_t address_len = 0;
+
    if (!hostname || !address || !port)
       return false;
 
-   const char *colon = strchr(hostname, ':');
+   colon = strchr(hostname, ':');
    if (colon)
    {
-      strlcpy(address, hostname, (size_t)(colon - hostname + 1));
+      address_len = (size_t)(colon - hostname);
+      if (address_len >= len)
+         address_len = len ? len - 1 : 0;
+
+      if (len && address_len > 0)
+      {
+         memcpy(address, hostname, address_len);
+         address[address_len] = '\0';
+      }
+      else if (len)
+         address[0] = '\0';
+
       *port = (unsigned)strtoul(colon + 1, NULL, 10);
    }
    else
    {
-      strlcpy(address, hostname, len);
+      if (len)
+         strlcpy(address, hostname, len);
       *port = 55435; /* default */
    }
 }
 
    if (session)
-      strlcpy(session, "", len);
+   {
+      if (len)
+         session[0] = '\0';
+   }
 
    return true;
 }
