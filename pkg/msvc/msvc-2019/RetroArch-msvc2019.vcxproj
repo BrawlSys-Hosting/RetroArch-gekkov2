@@ -151,7 +151,13 @@
   <PropertyGroup Condition="$(Configuration.Contains('Release'))">
     <UseDebugLibraries>false</UseDebugLibraries>
     <LinkIncremental>false</LinkIncremental>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <!--
+         Disable Whole Program Optimization for Release builds. The bundled
+         GekkoNet static archive is produced with a different toolchain and
+         MSVC's LTCG step rejects it as corrupt. Turning off /GL + /LTCG
+         keeps the linker happy while still allowing optimized builds.
+    -->
+    <WholeProgramOptimization>false</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='ARM'">
     <WindowsSDKDesktopARMSupport>true</WindowsSDKDesktopARMSupport>
@@ -169,6 +175,13 @@
   <PropertyGroup Label="GekkoNet">
     <GekkoNetLib>$(ProjectDir)..\..\..\gekkonet\windows\lib\libGekkoNet_STATIC.a</GekkoNetLib>
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="$(Configuration.Contains('Release'))">
+    <Link>
+      <!-- Ensure LTCG stays off for Release builds that consume the MinGW-built
+           GekkoNet archive. -->
+      <LinkTimeCodeGeneration>Default</LinkTimeCodeGeneration>
+    </Link>
+  </ItemDefinitionGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
     <LibraryPath>$(DXSDK_DIR)Lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
