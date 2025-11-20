@@ -187,6 +187,10 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='x64'">
     <LibraryPath>$(DXSDK_DIR)Lib\x64;$(LibraryPath)</LibraryPath>
+    <!-- Prefer 64-bit build tools to reduce memory pressure and avoid
+         unexpected cancellations when compiling the large RetroArch
+         sources under x64 configurations. -->
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
   </PropertyGroup>
   <PropertyGroup Condition="$(Configuration.Contains('QT'))">
     <QtVersion Condition="'$(QtVersion)' == ''">5.15.2</QtVersion>
