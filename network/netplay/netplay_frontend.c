@@ -65,6 +65,17 @@ typedef struct gekko_netplay_state
 
 static net_driver_state_t networking_driver_st;
 static gekko_netplay_state_t g_gekkonet;
+/* Netplay hosting now requires an explicit user request (via menu/hotkey).
+ * Track when a host start was actually asked for so we can ignore any
+ * implicit/automatic initialization attempts. */
+static bool g_host_start_requested;
+
+/* The default GekkoNet adapter binds a UDP port when created. We keep a single
+ * cached instance alive for the lifetime of RetroArch so we don't attempt to
+ * bind the same port more than once when users start/stop sessions repeatedly
+ * during the same run (which resulted in `EADDRINUSE`). */
+static GekkoNetAdapter *g_cached_adapter;
+static unsigned short   g_cached_adapter_port;
 
 net_driver_state_t *networking_state_get_ptr(void)
 {
@@ -84,6 +95,17 @@ static void gekkonet_reset_state(void)
 {
    gekkonet_free_remote_addr();
    memset(&g_gekkonet, 0, sizeof(g_gekkonet));
+}
+
+static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
+{
+   /* Reuse cached adapter when possible to avoid repeated UDP binds. */
+   if (g_cached_adapter && g_cached_adapter_port == port)
+      return g_cached_adapter;
+
+   g_cached_adapter      = gekko_default_adapter(port);
+   g_cached_adapter_port = g_cached_adapter ? port : 0;
+   return g_cached_adapter;
 }
 
 static bool gekkonet_resolve_remote(const char *server, unsigned port)
@@ -136,7 +158,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       return false;
    }
 
-   g_gekkonet.adapter     = gekko_default_adapter((unsigned short)port);
+   g_gekkonet.adapter     = gekkonet_get_adapter((unsigned short)port);
    g_gekkonet.listen_port = (unsigned short)port;
    g_gekkonet.is_server   = is_server;
 
@@ -348,6 +370,12 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
 {
    (void)mitm_session;
 
+   /* Only honor host startup when explicitly requested. */
+   if ((server == NULL || string_is_empty(server)) && !g_host_start_requested)
+      return false;
+
+   g_host_start_requested = false;
+
    if (g_gekkonet.running)
       return true;
 
@@ -400,6 +428,7 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
       case RARCH_NETPLAY_CTL_ENABLE_SERVER:
       {
          settings_t *settings = config_get_ptr();
+         g_host_start_requested = true;
          ret = init_netplay(NULL, settings->uints.netplay_port, NULL);
          break;
       }
