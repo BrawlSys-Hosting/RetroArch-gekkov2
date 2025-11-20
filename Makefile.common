@@ -1132,10 +1132,11 @@ ifeq ($(HAVE_GFX_WIDGETS), 1)
    endif
 
    OBJ += \
-          gfx/widgets/gfx_widget_volume.o \
-          gfx/widgets/gfx_widget_generic_message.o \
-          gfx/widgets/gfx_widget_libretro_message.o \
-          gfx/widgets/gfx_widget_progress_message.o \
+         gfx/widgets/gfx_widget_netplay.o \
+         gfx/widgets/gfx_widget_volume.o \
+         gfx/widgets/gfx_widget_generic_message.o \
+         gfx/widgets/gfx_widget_libretro_message.o \
+         gfx/widgets/gfx_widget_progress_message.o \
           gfx/widgets/gfx_widget_load_content_animation.o
    ifeq ($(HAVE_CHEEVOS), 1)
        OBJ += gfx/widgets/gfx_widget_achievement_popup.o \
@@ -2373,8 +2374,9 @@ ifeq ($(HAVE_NETWORKING), 1)
       LIBS += $(CURDIR)/gekkonet/linux/lib/libGekkoNet_STATIC.a
    endif
    OBJ += \
-          network/netplay/netplay_frontend.o \
-          network/netplay/netplay_room_parse.o
+         network/netplay/netplay_callbacks.o \
+         network/netplay/netplay_frontend.o \
+         network/netplay/netplay_room_parse.o
 
    # RetroAchievements
    ifeq ($(HAVE_CHEEVOS), 1)
