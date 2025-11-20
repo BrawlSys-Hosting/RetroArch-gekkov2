@@ -2356,6 +2356,11 @@ ifeq ($(HAVE_NETWORKING), 1)
    endif
    
    # Netplay
+   # GekkoNet ships as a C++ static library, so we must link the
+   # final RetroArch binary with the C++ linker to pull in libstdc++
+   # and friends (otherwise Linux builds fail with many undefined
+   # references from libGekkoNet_STATIC.a).
+   NEED_CXX_LINKER = 1
    DEFINES += -DHAVE_NETWORK_CMD
    ifneq ($(findstring Win32,$(OS)),)
       INCLUDE_DIRS += -I$(CURDIR)/gekkonet/windows/include
