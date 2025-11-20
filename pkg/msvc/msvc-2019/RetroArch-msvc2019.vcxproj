@@ -166,6 +166,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="GekkoNet">
+    <GekkoNetLib>$(ProjectDir)..\..\..\gekkonet\windows\lib\libGekkoNet_STATIC.a</GekkoNetLib>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Platform)'=='Win32'">
     <LibraryPath>$(DXSDK_DIR)Lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
@@ -210,7 +213,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM'">
@@ -232,7 +235,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <ShowProgress>LinkVerboseLib</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
@@ -255,7 +258,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <ShowProgress>LinkVerboseLib</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
@@ -278,7 +281,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -301,7 +304,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -324,7 +327,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -347,7 +350,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -370,7 +373,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -393,7 +396,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -416,7 +419,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -439,7 +442,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -462,7 +465,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -484,7 +487,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug Cg|x64'">
@@ -505,7 +508,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -527,7 +530,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -549,7 +552,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -577,7 +580,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM'">
@@ -604,7 +607,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <ShowProgress>LinkVerboseLib</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
@@ -632,7 +635,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;gdi32.lib;ole32.lib;shell32.lib;comdlg32.lib;winmm.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <ShowProgress>LinkVerboseLib</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
@@ -660,7 +663,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -688,7 +691,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -716,7 +719,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -744,7 +747,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -772,7 +775,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -800,7 +803,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -828,7 +831,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -856,7 +859,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -884,7 +887,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -911,7 +914,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <ShowProgress>LinkVerboseLib</ShowProgress>
     </Link>
   </ItemDefinitionGroup>
@@ -938,7 +941,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -965,7 +968,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -992,7 +995,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>msimg32.lib;winmm.lib;Dinput8.lib;dxguid.lib;Iphlpapi.lib;Ws2_32.lib;qtmain.lib;Qt5Widgets.lib;Qt5Gui.lib;Qt5Core.lib;Qt5Network.lib;Qt5Concurrent.lib;$(GekkoNetLib);%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(CG_LIB64_PATH)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
@@ -1003,12 +1006,14 @@
     <ClCompile Include="..\..\..\griffin\griffin.c">
       <CompileAs>CompileAsC</CompileAs>
     </ClCompile>
+    <ClCompile Include="..\..\..\gfx\widgets\gfx_widget_netplay.c" />
     <ClCompile Include="..\..\..\griffin\griffin_cpp.cpp">
       <AdditionalOptions Condition="$(Configuration.Contains('Debug')) And '$(Platform)'=='x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="..\..\..\griffin\griffin_glslang.cpp">
       <AdditionalOptions Condition="$(Configuration.Contains('Debug')) And '$(Platform)'=='x64'">/bigobj %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="..\..\..\network\netplay\netplay_callbacks.c" />
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\..\..\ui\drivers\qt\*.h" Condition="$(Configuration.Contains('QT'))">
