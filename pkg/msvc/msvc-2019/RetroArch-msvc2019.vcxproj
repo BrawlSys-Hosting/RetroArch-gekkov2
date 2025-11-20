@@ -194,6 +194,11 @@
   <PropertyGroup Condition="$(Configuration.ToLower().Contains('cg')) And !$(Platform.Contains('64'))">
     <LibraryPath>$(CG_LIB_PATH);$(LibraryPath)</LibraryPath>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>
