@@ -34,25 +34,25 @@ extern "C" {
 
 #ifdef _WIN32
 #ifdef GEKKONET_STATIC
-    // Static library - no import/export needed
+    /* Static library - no import/export needed */
 #define GEKKONET_API
 #else
 #ifdef GEKKONET_DLL_EXPORT
-    // Building the DLL
+    /* Building the DLL */
 #define GEKKONET_API __declspec(dllexport)
 #else
-    // Using the DLL
+    /* Using the DLL */
 #define GEKKONET_API __declspec(dllimport)
 #endif
 #endif
 #else
-    // Non-Windows platforms don't need special export macros
+    /* Non-Windows platforms don't need special export macros */
 #define GEKKONET_API
 #endif
 
-// GekkoNet is mostly self contained memory wise using internal memory buffers.
-// Technically the user shouldnt need to free or create any memory (look at the examples).
-// The only case the user needs to create memory is when slotting in their own GekkoNetAdapter
+/* GekkoNet is mostly self contained memory wise using internal memory buffers. */
+/* Technically the user shouldnt need to free or create any memory (look at the examples). */
+/* The only case the user needs to create memory is when slotting in their own GekkoNetAdapter */
 typedef struct GekkoSession GekkoSession;
 
 typedef struct GekkoConfig {
@@ -85,13 +85,13 @@ typedef struct GekkoNetResult {
 } GekkoNetResult;
 
 typedef struct GekkoNetAdapter {
-    // send data to another peer
+    /* send data to another peer */
     void (*send_data)(GekkoNetAddress* addr, const char* data, int length);
-    // receive all packets accumulated between the last frame and now
-    // the results within the array will be freed after use using the free_data function
-    // the array itself won't be touched
+    /* receive all packets accumulated between the last frame and now */
+    /* the results within the array will be freed after use using the free_data function */
+    /* the array itself won't be touched */
     GekkoNetResult** (*receive_data)(int* length);
-    // free data function so gekkonet can cleanup data that the user created.
+    /* free data function so gekkonet can cleanup data that the user created. */
     void (*free_data)(void* data_ptr);
 } GekkoNetAdapter;
 
@@ -106,7 +106,7 @@ typedef struct GekkoGameEvent {
     GekkoGameEventType type;
 
     union EventData {
-        // events 
+        /* events */
         struct Advance {
             int frame;
             unsigned int input_len;
@@ -163,14 +163,14 @@ typedef struct GekkoSessionEvent {
 } GekkoSessionEvent;
 
 typedef struct GekkoNetworkStats {
-    // unsigned int bytes_received;
-    // unsigned int bytes_sent;
+    /* unsigned int bytes_received; */
+    /* unsigned int bytes_sent; */
     unsigned short last_ping;
     float avg_ping;
     float jitter;
 } GekkoNetworkStats;
 
-// Public Facing API
+/* Public Facing API */
 GEKKONET_API bool gekko_create(GekkoSession** session);
 
 GEKKONET_API bool gekko_destroy(GekkoSession* session);
@@ -199,7 +199,7 @@ GEKKONET_API void gekko_network_poll(GekkoSession* session);
 
 GEKKONET_API GekkoNetAdapter* gekko_default_adapter(unsigned short port);
 
-#endif // GEKKONET_NO_ASIO
+#endif
 
 #ifdef __cplusplus
 }
