@@ -379,9 +379,12 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
    if (g_gekkonet.running)
       return true;
 
+   if (!gekkonet_init_session(server == NULL || string_is_empty(server), server, port))
+      return false;
+
    networking_driver_st.data = (netplay_t*)&g_gekkonet;
 
-   return gekkonet_init_session(server == NULL || string_is_empty(server), server, port);
+   return true;
 }
 
 void deinit_netplay(void)
