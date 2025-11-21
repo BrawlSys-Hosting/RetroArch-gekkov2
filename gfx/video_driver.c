@@ -1155,8 +1155,11 @@ void* video_display_server_init(enum rarch_display_type type)
 
       if (!string_is_empty(current_display_server->ident))
       {
-         RARCH_LOG("[Video] Found display server: \"%s\".\n",
-               current_display_server->ident);
+         if (string_is_equal(current_display_server->ident, "null"))
+            RARCH_WARN("[Video] No display server found. Using headless 'null' driver.\n");
+         else
+            RARCH_LOG("[Video] Found display server: \"%s\".\n",
+                  current_display_server->ident);
       }
    }
 
