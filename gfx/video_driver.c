@@ -1113,6 +1113,7 @@ void* video_display_server_init(enum rarch_display_type type)
 {
    video_driver_state_t *video_st = &video_driver_st;
    runloop_state_t *runloop_st    = runloop_state_get_ptr();
+   enum rarch_display_type resolved_type = type;
 
    /* Reuse when already and still running */
    if (current_display_server && runloop_st->flags & RUNLOOP_FLAG_IS_INITED)
@@ -1137,11 +1138,22 @@ void* video_display_server_init(enum rarch_display_type type)
          current_display_server = &dispserv_kms;
 #endif
          break;
+      case RARCH_DISPLAY_NONE:
       default:
-#if defined(ANDROID)
+#if defined(_WIN32) && !defined(_XBOX) && !defined(__WINRT__)
+         current_display_server = &dispserv_win32;
+         resolved_type          = RARCH_DISPLAY_WIN32;
+#elif defined(ANDROID)
          current_display_server = &dispserv_android;
 #elif defined(__APPLE__)
          current_display_server = &dispserv_apple;
+         resolved_type          = RARCH_DISPLAY_OSX;
+#elif defined(HAVE_X11)
+         current_display_server = &dispserv_x11;
+         resolved_type          = RARCH_DISPLAY_X11;
+#elif defined(HAVE_KMS)
+         current_display_server = &dispserv_kms;
+         resolved_type          = RARCH_DISPLAY_KMS;
 #else
          current_display_server = &dispserv_null;
 #endif
@@ -1150,13 +1162,28 @@ void* video_display_server_init(enum rarch_display_type type)
 
    if (current_display_server)
    {
+      bool display_type_changed = (type != resolved_type);
+
+      video_st->display_type = resolved_type;
+
       if (current_display_server->init)
          video_st->current_display_server_data = current_display_server->init();
 
       if (!string_is_empty(current_display_server->ident))
       {
          if (string_is_equal(current_display_server->ident, "null"))
-            RARCH_WARN("[Video] No display server found. Using headless 'null' driver.\n");
+         {
+            if (type == RARCH_DISPLAY_NONE)
+               RARCH_WARN("[Video] No display server could be detected. Using headless 'null' driver; video output may be unavailable.\n");
+            else
+               RARCH_WARN("[Video] Requested display server is unavailable. Using headless 'null' driver; video output may be unavailable.\n");
+         }
+         else if (type == RARCH_DISPLAY_NONE && resolved_type != RARCH_DISPLAY_NONE)
+            RARCH_LOG("[Video] Auto-detected display server: \"%s\".\n",
+                  current_display_server->ident);
+         else if (display_type_changed)
+            RARCH_WARN("[Video] Requested display server unavailable; falling back to \"%s\".\n",
+                  current_display_server->ident);
          else
             RARCH_LOG("[Video] Found display server: \"%s\".\n",
                   current_display_server->ident);
