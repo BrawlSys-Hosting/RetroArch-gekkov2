@@ -12,6 +12,7 @@
 #include "netplay_defines.h"
 
 #include "../../configuration.h"
+#include "../../tasks/task_content.h"
 #include "../../retroarch.h"
 #include "../../verbosity.h"
 #include "../../performance_counters.h"
@@ -432,7 +433,13 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
       {
          settings_t *settings = config_get_ptr();
          g_host_start_requested = true;
-         ret = init_netplay(NULL, settings->uints.netplay_port, NULL);
+
+         /* If there is no active core/content, defer session creation until the
+          * next content load triggers CMD_EVENT_NETPLAY_INIT. */
+         if (!content_is_inited())
+            ret = true;
+         else
+            ret = init_netplay(NULL, settings->uints.netplay_port, NULL);
          break;
       }
       case RARCH_NETPLAY_CTL_ENABLE_CLIENT:

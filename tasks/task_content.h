@@ -111,6 +111,8 @@ bool task_push_load_content_with_core(
       retro_task_callback_t cb,
       void *user_data);
 
+bool content_is_inited(void);
+
 bool task_push_load_subsystem_with_core(
       const char *fullpath,
       content_ctx_info_t *content_info,
