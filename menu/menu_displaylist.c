@@ -6984,27 +6984,11 @@ static unsigned menu_displaylist_populate_subsystem(
 #ifdef HAVE_NETWORKING
 static unsigned menu_displaylist_netplay_refresh_rooms(file_list_t *list)
 {
-   int i, j;
-   char s[256];
-   const char *room_type;
-   const char *cnc_netplay_room   = NULL;
-   const char *msg_int_nc         = NULL;
-   const char *msg_int_relay      = NULL;
-   const char *msg_int            = NULL;
-   const char *msg_local          = NULL;
-   const char *msg_room_pwd       = NULL;
-   unsigned count                 = 0;
-   core_info_list_t *coreinfos    = NULL;
-   settings_t *settings           = config_get_ptr();
-   net_driver_state_t *net_st     = networking_state_get_ptr();
-   bool show_only_connectable     =
-      settings->bools.netplay_show_only_connectable;
-   bool show_only_installed_cores =
-      settings->bools.netplay_show_only_installed_cores;
-   bool show_passworded           = settings->bools.netplay_show_passworded;
+   unsigned count = 0;
 
    menu_entries_clear(list);
 
+   /* GekkoNet: direct host/client toggles and network settings only. */
    if (menu_entries_append(list,
          msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETWORK_HOSTING_SETTINGS),
          msg_hash_to_str(MENU_ENUM_LABEL_NETWORK_HOSTING_SETTINGS),
@@ -7044,109 +7028,6 @@ static unsigned menu_displaylist_netplay_refresh_rooms(file_list_t *list)
          MENU_ENUM_LABEL_NETWORK_SETTINGS,
          MENU_SETTING_ACTION, 0, 0, NULL))
       count++;
-
-   if (menu_entries_append(list,
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_LOBBY_FILTERS),
-         msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_LOBBY_FILTERS),
-         MENU_ENUM_LABEL_NETPLAY_LOBBY_FILTERS,
-         MENU_SETTING_ACTION, 0, 0, NULL))
-      count++;
-
-   if (menu_entries_append(list,
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_REFRESH_ROOMS),
-         msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_REFRESH_ROOMS),
-         MENU_ENUM_LABEL_NETPLAY_REFRESH_ROOMS,
-         MENU_SETTING_ACTION, 0, 0, NULL))
-      count++;
-
-#ifdef HAVE_NETPLAYDISCOVERY
-   if (menu_entries_append(list,
-         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_REFRESH_LAN),
-         msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_REFRESH_LAN),
-         MENU_ENUM_LABEL_NETPLAY_REFRESH_LAN,
-         MENU_SETTING_ACTION, 0, 0, NULL))
-      count++;
-#endif
-
-   core_info_get_list(&coreinfos);
-
-   msg_int_nc       = msg_hash_to_str(MSG_INTERNET_NOT_CONNECTABLE);
-   msg_int_relay    = msg_hash_to_str(MSG_INTERNET_RELAY);
-   msg_int          = msg_hash_to_str(MSG_INTERNET);
-   msg_local        = msg_hash_to_str(MSG_LOCAL);
-   msg_room_pwd     = msg_hash_to_str(MSG_ROOM_PASSWORDED);
-   cnc_netplay_room = msg_hash_to_str(MENU_ENUM_LABEL_CONNECT_NETPLAY_ROOM);
-
-   for (i = 0; i < net_st->room_count; i++)
-   {
-      size_t _len = 0;
-      struct netplay_room *room = &net_st->room_list[i];
-
-      /* Get rid of any room that is not running RetroArch. */
-      if (!room->is_retroarch)
-         continue;
-
-      /* Get rid of rooms running older (incompatible) versions. */
-      if (!netplay_compatible_version(room->retroarch_version))
-         continue;
-
-      /* Get rid of any room that is not connectable,
-         if the user opt-in. */
-      if (!room->connectable)
-      {
-         if (show_only_connectable)
-            continue;
-
-         room_type = msg_int_nc;
-      }
-      else if (room->lan)
-         room_type = msg_local;
-      else if (room->host_method == NETPLAY_HOST_METHOD_MITM)
-         room_type = msg_int_relay;
-      else
-         room_type = msg_int;
-
-      /* Get rid of any room running a core that we don't have installed,
-         if the user opt-in. */
-      if (show_only_installed_cores)
-      {
-         for (j = 0; j < (int)coreinfos->count; j++)
-         {
-            if (string_is_equal_case_insensitive(coreinfos->list[j].core_name,
-                  room->corename))
-               break;
-         }
-         if (j >= (int)coreinfos->count)
-            continue;
-      }
-
-      /* Get rid of any room that is passworded,
-         if the user opt-in. */
-      if (room->has_password || room->has_spectate_password)
-      {
-         if (!show_passworded)
-            continue;
-         _len += strlcpy(s, "[", sizeof(s) - _len);
-         _len += strlcpy(s + _len, msg_room_pwd, sizeof(s) - _len);
-         _len += strlcpy(s + _len, "] ", sizeof(s) - _len);
-      }
-
-      _len += strlcpy(s + _len, room_type, sizeof(s) - _len);
-      _len += strlcpy(s + _len, ": ", sizeof(s) - _len);
-      _len += strlcpy(s + _len, room->nickname, sizeof(s) - _len);
-
-      if (!room->lan && !string_is_empty(room->country))
-      {
-         _len += strlcpy(s + _len, " (", sizeof(s) - _len);
-         _len += strlcpy(s + _len, room->country, sizeof(s) - _len);
-         strlcpy(s + _len, ")", sizeof(s) - _len);
-      }
-
-      if (menu_entries_append(list, s, cnc_netplay_room,
-            MENU_ENUM_LABEL_CONNECT_NETPLAY_ROOM,
-            (unsigned)MENU_SETTINGS_NETPLAY_ROOMS_START + i, 0, 0, NULL))
-         count++;
-   }
 
    return count;
 }
