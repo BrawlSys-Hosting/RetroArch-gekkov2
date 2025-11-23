@@ -200,6 +200,8 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data);
 bool netplay_reinit_serialization(void);
 bool netplay_is_spectating(void);
 void netplay_force_send_savestate(void);
+int16_t netplay_input_state(unsigned port, unsigned device,
+      unsigned idx, unsigned id);
 
 #ifdef HAVE_NETPLAYDISCOVERY
 /** Initialize Netplay discovery */

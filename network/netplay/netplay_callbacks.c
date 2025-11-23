@@ -26,5 +26,5 @@ size_t audio_sample_batch_net(const int16_t *data, size_t frames)
 int16_t input_state_net(unsigned port, unsigned device,
    unsigned idx, unsigned id)
 {
-   return input_driver_state_wrapper(port, device, idx, id);
+   return netplay_input_state(port, device, idx, id);
 }

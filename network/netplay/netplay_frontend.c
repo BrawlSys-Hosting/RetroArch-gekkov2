@@ -17,6 +17,7 @@
 #include "../../verbosity.h"
 #include "../../performance_counters.h"
 #include "../../input/input_driver.h"
+#include "../../runloop.h"
 
 #if defined(_WIN32)
 #include "../../gekkonet/windows/include/gekkonet.h"
@@ -34,6 +35,10 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #endif
+
+/* Forward declarations from runloop.c */
+bool core_set_netplay_callbacks(void);
+bool core_unset_netplay_callbacks(void);
 
 /* ------------------------------------------------------------------------- */
 /* MITM server table retained for UI compatibility. */
@@ -58,6 +63,18 @@ typedef struct gekko_netplay_state
    unsigned short     listen_port;
    bool               is_server;
    bool               running;
+   bool               paused;
+   bool               callbacks_installed;
+   /* aggregated per-player input for the current frame */
+   struct
+   {
+      uint16_t buttons;
+      int16_t  lx;
+      int16_t  ly;
+   }                  player_inputs[4];
+   unsigned char      num_players;
+   bool               inputs_ready;
+   int                current_frame;
    /* simple cached per-player inputs */
    uint16_t           last_buttons;
    int16_t            last_lx;
@@ -78,9 +95,37 @@ static bool g_host_start_requested;
 static GekkoNetAdapter *g_cached_adapter;
 static unsigned short   g_cached_adapter_port;
 
-net_driver_state_t *networking_state_get_ptr(void)
+static uint32_t gekkonet_checksum(const unsigned char *data, unsigned int len)
 {
-   return &networking_driver_st;
+   /* Lightweight FNV-1a checksum for desync detection. */
+   uint32_t hash = 2166136261u;
+   unsigned int i;
+   for (i = 0; i < len; i++)
+   {
+      hash ^= data[i];
+      hash *= 16777619u;
+   }
+   return hash;
+}
+
+static uint16_t gekkonet_read_buttons(void);
+
+static void gekkonet_install_callbacks(void)
+{
+   if (g_gekkonet.callbacks_installed)
+      return;
+
+   if (core_set_netplay_callbacks())
+      g_gekkonet.callbacks_installed = true;
+}
+
+static void gekkonet_uninstall_callbacks(void)
+{
+   if (!g_gekkonet.callbacks_installed)
+      return;
+
+   core_unset_netplay_callbacks();
+   g_gekkonet.callbacks_installed = false;
 }
 
 static void gekkonet_free_remote_addr(void)
@@ -96,6 +141,42 @@ static void gekkonet_reset_state(void)
 {
    gekkonet_free_remote_addr();
    memset(&g_gekkonet, 0, sizeof(g_gekkonet));
+}
+
+static bool gekkonet_serialize_state(unsigned char *dst,
+      unsigned int capacity, unsigned int *out_len)
+{
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   size_t serialize_size       = 0;
+
+   if (!runloop_st
+         || !runloop_st->current_core.retro_serialize
+         || !runloop_st->current_core.retro_serialize_size)
+      return false;
+
+   serialize_size = runloop_st->current_core.retro_serialize_size();
+   if (!serialize_size || serialize_size > capacity)
+      return false;
+
+   if (!runloop_st->current_core.retro_serialize(dst, serialize_size))
+      return false;
+
+   if (out_len)
+      *out_len = (unsigned)serialize_size;
+   return true;
+}
+
+static bool gekkonet_load_state(const unsigned char *src, unsigned int len)
+{
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   if (!runloop_st || !runloop_st->current_core.retro_unserialize)
+      return false;
+   return runloop_st->current_core.retro_unserialize(src, len);
+}
+
+net_driver_state_t *networking_state_get_ptr(void)
+{
+   return &networking_driver_st;
 }
 
 static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
@@ -147,11 +228,165 @@ static bool gekkonet_resolve_remote(const char *server, unsigned port)
    return true;
 }
 
+static void gekkonet_update_inputs(const GekkoGameEvent *evt)
+{
+   unsigned int per_player = g_gekkonet.config.input_size;
+   unsigned int i;
+
+   if (!evt || evt->type != AdvanceEvent)
+      return;
+
+   if (!evt->data.adv.inputs || evt->data.adv.input_len < per_player)
+      return;
+
+   for (i = 0; i < g_gekkonet.num_players; i++)
+   {
+      unsigned int offset = i * per_player;
+      if (offset + sizeof(g_gekkonet.player_inputs[i]) <= evt->data.adv.input_len)
+      {
+         memcpy(&g_gekkonet.player_inputs[i],
+               evt->data.adv.inputs + offset,
+               sizeof(g_gekkonet.player_inputs[i]));
+      }
+   }
+
+   g_gekkonet.inputs_ready  = true;
+   g_gekkonet.current_frame = evt->data.adv.frame;
+}
+
+static void gekkonet_handle_save_event(GekkoGameEvent *evt)
+{
+   unsigned int written = 0;
+
+   if (!evt)
+      return;
+
+   if (!g_gekkonet.config.state_size)
+      return;
+
+   if (!gekkonet_serialize_state(evt->data.save.state,
+            g_gekkonet.config.state_size, &written))
+   {
+      if (evt->data.save.state_len)
+         *evt->data.save.state_len = 0;
+      if (evt->data.save.checksum)
+         *evt->data.save.checksum = 0;
+      return;
+   }
+
+   if (evt->data.save.state_len)
+      *evt->data.save.state_len = written;
+   if (evt->data.save.checksum)
+      *evt->data.save.checksum = gekkonet_checksum(evt->data.save.state, written);
+}
+
+static void gekkonet_handle_load_event(GekkoGameEvent *evt)
+{
+   if (!evt || !evt->data.load.state || !evt->data.load.state_len)
+      return;
+
+   if (!gekkonet_load_state(evt->data.load.state, evt->data.load.state_len))
+      RARCH_ERR("[GekkoNet] Failed to load state for frame %d.\n",
+            evt->data.load.frame);
+}
+
+static void gekkonet_process_game_events(void)
+{
+   int event_count       = 0;
+   int session_event_cnt = 0;
+   GekkoGameEvent **events = NULL;
+
+   events = gekko_update_session(g_gekkonet.session, &event_count);
+
+   if (events && event_count > 0)
+   {
+      for (int i = 0; i < event_count; i++)
+      {
+         GekkoGameEvent *evt = events[i];
+         if (!evt)
+            continue;
+
+         switch (evt->type)
+         {
+            case AdvanceEvent:
+               gekkonet_update_inputs(evt);
+               break;
+            case SaveEvent:
+               gekkonet_handle_save_event(evt);
+               break;
+            case LoadEvent:
+               gekkonet_handle_load_event(evt);
+               break;
+            default:
+               break;
+         }
+      }
+   }
+
+   /* Drain session events to avoid back pressure, even if we ignore them. */
+   (void)g_gekkonet.session;
+   (void)gekko_session_events(g_gekkonet.session, &session_event_cnt);
+}
+
+static void gekkonet_step_frame(void)
+{
+   if (!g_gekkonet.running)
+      return;
+
+   /* Push local inputs for this frame, then advance the session. */
+   {
+      uint16_t buttons = gekkonet_read_buttons();
+      int16_t lx       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
+            RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
+      int16_t ly       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
+            RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
+
+      struct
+      {
+         uint16_t buttons;
+         int16_t  lx;
+         int16_t  ly;
+      } payload;
+
+      payload.buttons     = buttons;
+      payload.lx          = lx;
+      payload.ly          = ly;
+
+      g_gekkonet.last_buttons = buttons;
+      g_gekkonet.last_lx      = lx;
+      g_gekkonet.last_ly      = ly;
+
+      gekko_add_local_input(g_gekkonet.session,
+            g_gekkonet.local_handle, &payload);
+   }
+
+   gekko_network_poll(g_gekkonet.session);
+   gekkonet_process_game_events();
+}
+
+static uint16_t gekkonet_read_buttons(void)
+{
+   /* Use joypad mask for player 0 */
+   return (uint16_t)input_driver_state_wrapper(0, RETRO_DEVICE_JOYPAD,
+            0, RETRO_DEVICE_ID_JOYPAD_MASK);
+}
+
 static bool gekkonet_init_session(bool is_server, const char *server, unsigned port)
 {
    settings_t *settings = config_get_ptr();
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
+   size_t serialize_sz         = 0;
 
    gekkonet_reset_state();
+
+   g_gekkonet.num_players = (settings->uints.input_max_users > 1) ? 2 : 1;
+   if (g_gekkonet.num_players == 0)
+      g_gekkonet.num_players = 1;
+
+   if (runloop_st && runloop_st->current_core.retro_serialize_size)
+      serialize_sz = runloop_st->current_core.retro_serialize_size();
+   else
+      RARCH_WARN("[GekkoNet] Core serialization size unavailable; using fallback buffer.\n");
 
    if (!gekko_create(&g_gekkonet.session))
    {
@@ -162,6 +397,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.adapter     = gekkonet_get_adapter((unsigned short)port);
    g_gekkonet.listen_port = (unsigned short)port;
    g_gekkonet.is_server   = is_server;
+   g_gekkonet.inputs_ready= false;
+   g_gekkonet.paused      = false;
 
    if (!g_gekkonet.adapter)
    {
@@ -170,15 +407,23 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    }
 
    memset(&g_gekkonet.config, 0, sizeof(g_gekkonet.config));
-   g_gekkonet.config.num_players             = settings->uints.input_max_users > 1 ? 2 : 1;
+   g_gekkonet.config.num_players             = g_gekkonet.num_players;
    g_gekkonet.config.max_spectators          = 0;
    g_gekkonet.config.input_prediction_window = 2;
    g_gekkonet.config.spectator_delay         = 0;
-   g_gekkonet.config.input_size              = sizeof(uint16_t) * 2;
-   g_gekkonet.config.state_size              = (unsigned)(settings->sizes.rewind_buffer_size * 1024);
+   g_gekkonet.config.input_size              = sizeof(uint16_t) + sizeof(int16_t) * 2;
+   g_gekkonet.config.state_size              = serialize_sz ? (unsigned)serialize_sz
+         : (unsigned)(settings->sizes.rewind_buffer_size * 1024);
    g_gekkonet.config.limited_saving          = false;
    g_gekkonet.config.post_sync_joining       = false;
    g_gekkonet.config.desync_detection        = true;
+
+   if (!g_gekkonet.config.state_size)
+   {
+      g_gekkonet.config.state_size = 1024 * 1024;
+      RARCH_WARN("[GekkoNet] State size unavailable; defaulting to %u bytes.\n",
+            g_gekkonet.config.state_size);
+   }
 
    gekko_net_adapter_set(g_gekkonet.session, g_gekkonet.adapter);
 
@@ -217,64 +462,10 @@ static void gekkonet_shutdown(void)
    if (g_gekkonet.session)
       gekko_destroy(g_gekkonet.session);
 
+   gekkonet_uninstall_callbacks();
    gekkonet_free_remote_addr();
 
    gekkonet_reset_state();
-}
-
-static uint16_t gekkonet_read_buttons(void)
-{
-   /* Use joypad mask for player 0 */
-   return (uint16_t)input_driver_state_wrapper(0, RETRO_DEVICE_JOYPAD,
-            0, RETRO_DEVICE_ID_JOYPAD_MASK);
-}
-
-static void gekkonet_push_local_input(void)
-{
-   uint16_t buttons = gekkonet_read_buttons();
-   int16_t lx       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
-         RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
-   int16_t ly       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
-         RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
-
-   /* Pack buttons + simple analog into buffer */
-   uint16_t payload[2];
-   payload[0] = buttons;
-   payload[1] = (uint16_t)(((lx & 0xFF) << 8) | (ly & 0xFF));
-
-   g_gekkonet.last_buttons = buttons;
-   g_gekkonet.last_lx      = lx;
-   g_gekkonet.last_ly      = ly;
-
-   gekko_add_local_input(g_gekkonet.session, g_gekkonet.local_handle, payload);
-}
-
-static void gekkonet_poll(void)
-{
-   int i                 = 0;
-   int event_count       = 0;
-   GekkoGameEvent **events;
-
-   gekko_network_poll(g_gekkonet.session);
-
-   /* drain events to keep session progressing */
-   events = gekko_update_session(g_gekkonet.session, &event_count);
-
-   for (i = 0; i < event_count; i++)
-   {
-      GekkoGameEvent *evt = events[i];
-      switch (evt->type)
-      {
-         case AdvanceEvent:
-            /* Inputs are processed internally by GekkoNet; RetroArch already polled
-             * local inputs, so we just continue. */
-            break;
-         case SaveEvent:
-         case LoadEvent:
-         default:
-            break;
-      }
-   }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -384,6 +575,7 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
       return false;
 
    networking_driver_st.data = (netplay_t*)&g_gekkonet;
+   gekkonet_install_callbacks();
 
    return true;
 }
@@ -407,6 +599,37 @@ bool netplay_is_spectating(void)
 
 void netplay_force_send_savestate(void)
 {
+}
+
+int16_t netplay_input_state(unsigned port, unsigned device,
+      unsigned idx, unsigned id)
+{
+   if (g_gekkonet.running && g_gekkonet.inputs_ready &&
+         port < g_gekkonet.num_players)
+   {
+      uint16_t buttons = g_gekkonet.player_inputs[port].buttons;
+      switch (device)
+      {
+         case RETRO_DEVICE_JOYPAD:
+            if (id < 32)
+               return (buttons & (1u << id)) ? 1 : 0;
+            return 0;
+         case RETRO_DEVICE_ANALOG:
+            if (idx == RETRO_DEVICE_INDEX_ANALOG_LEFT)
+            {
+               if (id == RETRO_DEVICE_ID_ANALOG_X)
+                  return g_gekkonet.player_inputs[port].lx;
+               if (id == RETRO_DEVICE_ID_ANALOG_Y)
+                  return g_gekkonet.player_inputs[port].ly;
+            }
+            /* No right stick data in our compact payload */
+            return 0;
+         default:
+            break;
+      }
+   }
+
+   return input_driver_state_wrapper(port, device, idx, id);
 }
 
 bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
@@ -458,34 +681,62 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
          ret = true;
          break;
       case RARCH_NETPLAY_CTL_PRE_FRAME:
-         if (g_gekkonet.running)
+         if (g_gekkonet.paused)
          {
-            gekkonet_push_local_input();
-            ret = true;
+            if (g_gekkonet.running)
+            {
+               gekko_network_poll(g_gekkonet.session);
+               gekkonet_process_game_events();
+            }
+            ret = false;
          }
          else
-            ret = false;
+         {
+            if (g_gekkonet.running)
+               gekkonet_step_frame();
+            /* When netplay is disabled we should not stall the runloop. */
+            ret = true;
+         }
          break;
       case RARCH_NETPLAY_CTL_POST_FRAME:
-         if (g_gekkonet.running)
-            gekkonet_poll();
-         break;
-      case RARCH_NETPLAY_CTL_ALLOW_PAUSE:
-      case RARCH_NETPLAY_CTL_ALLOW_TIMESKIP:
+         /* Post-frame polling is handled in PRE_FRAME; keep this for
+          * forward compatibility. */
          ret = true;
          break;
+      case RARCH_NETPLAY_CTL_ALLOW_PAUSE:
+         ret = true;
+         break;
+      case RARCH_NETPLAY_CTL_ALLOW_TIMESKIP:
+         ret = !g_gekkonet.running;
+         break;
       case RARCH_NETPLAY_CTL_PAUSE:
+         g_gekkonet.paused = true;
+         ret = true;
+         break;
       case RARCH_NETPLAY_CTL_UNPAUSE:
+         g_gekkonet.paused = false;
+         ret = true;
+         break;
       case RARCH_NETPLAY_CTL_GAME_WATCH:
       case RARCH_NETPLAY_CTL_PLAYER_CHAT:
+         ret = false;
+         break;
       case RARCH_NETPLAY_CTL_LOAD_SAVESTATE:
       case RARCH_NETPLAY_CTL_RESET:
       case RARCH_NETPLAY_CTL_FINISHED_NAT_TRAVERSAL:
       case RARCH_NETPLAY_CTL_DESYNC_PUSH:
       case RARCH_NETPLAY_CTL_DESYNC_POP:
+         ret = true;
+         break;
       case RARCH_NETPLAY_CTL_REFRESH_CLIENT_INFO:
+         ret = false;
+         break;
       case RARCH_NETPLAY_CTL_IS_REPLAYING:
+         ret = false;
+         break;
       case RARCH_NETPLAY_CTL_IS_DATA_INITED:
+         ret = g_gekkonet.running;
+         break;
       case RARCH_NETPLAY_CTL_SET_CORE_PACKET_INTERFACE:
       case RARCH_NETPLAY_CTL_USE_CORE_PACKET_INTERFACE:
       case RARCH_NETPLAY_CTL_KICK_CLIENT:
