@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include <boolean.h>
 #include <string/stdstring.h>
@@ -13,6 +14,7 @@
 
 #include "../../configuration.h"
 #include "../../tasks/task_content.h"
+#include "../../tasks/tasks_internal.h"
 #include "../../retroarch.h"
 #include "../../verbosity.h"
 #include "../../performance_counters.h"
@@ -188,6 +190,19 @@ static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
    g_cached_adapter      = gekko_default_adapter(port);
    g_cached_adapter_port = g_cached_adapter ? port : 0;
    return g_cached_adapter;
+}
+
+static void gekkonet_start_nat_traversal(unsigned short port)
+{
+   net_driver_state_t *net_st = networking_state_get_ptr();
+
+   if (!net_st)
+      return;
+
+   if (!task_push_netplay_nat_traversal(&net_st->nat_traversal_request, port))
+      RARCH_WARN("[GekkoNet] NAT traversal setup failed to start.\n");
+   else
+      RARCH_LOG("[GekkoNet] NAT traversal requested for port %u.\n", port);
 }
 
 static bool gekkonet_resolve_remote(const char *server, unsigned port)
@@ -440,6 +455,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    if (is_server)
    {
       g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer, NULL);
+      /* Request NAT traversal for hosts to publish external mapping. */
+      gekkonet_start_nat_traversal((unsigned short)port);
    }
    else
    {
@@ -729,11 +746,18 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
          break;
       case RARCH_NETPLAY_CTL_LOAD_SAVESTATE:
       case RARCH_NETPLAY_CTL_RESET:
-      case RARCH_NETPLAY_CTL_FINISHED_NAT_TRAVERSAL:
       case RARCH_NETPLAY_CTL_DESYNC_PUSH:
       case RARCH_NETPLAY_CTL_DESYNC_POP:
          ret = true;
          break;
+      case RARCH_NETPLAY_CTL_FINISHED_NAT_TRAVERSAL:
+      {
+         unsigned long ext_port = (unsigned long)(uintptr_t)data;
+         if (ext_port)
+            RARCH_LOG("[GekkoNet] NAT traversal mapped external port: %lu\n", ext_port);
+         ret = true;
+         break;
+      }
       case RARCH_NETPLAY_CTL_REFRESH_CLIENT_INFO:
          ret = false;
          break;
