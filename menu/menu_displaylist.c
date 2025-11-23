@@ -7032,6 +7032,13 @@ static unsigned menu_displaylist_netplay_refresh_rooms(file_list_t *list)
       count++;
 
    if (menu_entries_append(list,
+         msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_ENABLE_HOST),
+         msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_ENABLE_HOST),
+         MENU_ENUM_LABEL_NETPLAY_ENABLE_HOST,
+         MENU_SETTING_ACTION, 0, 0, NULL))
+      count++;
+
+   if (menu_entries_append(list,
          msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETWORK_SETTINGS),
          msg_hash_to_str(MENU_ENUM_LABEL_NETWORK_SETTINGS),
          MENU_ENUM_LABEL_NETWORK_SETTINGS,
@@ -12341,19 +12348,7 @@ bool menu_displaylist_ctl(enum menu_displaylist_ctl_state type,
                            msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_DISCONNECT),
                            MENU_ENUM_LABEL_NETPLAY_DISCONNECT,
                            MENU_SETTING_ACTION, 0, 0, NULL);
-                     if (netplay_driver_ctl(RARCH_NETPLAY_CTL_IS_DATA_INITED, NULL))
-                     {
-                        menu_entries_append(list,
-                              msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_KICK),
-                              msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_KICK),
-                              MENU_ENUM_LABEL_NETPLAY_KICK,
-                              MENU_SETTING_ACTION, 0, 0, NULL);
-                        menu_entries_append(list,
-                              msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_BAN),
-                              msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_BAN),
-                              MENU_ENUM_LABEL_NETPLAY_BAN,
-                              MENU_SETTING_ACTION, 0, 0, NULL);
-                     }
+                     /* GekkoNet: Kick/Ban unsupported */
                   }
                }
                else

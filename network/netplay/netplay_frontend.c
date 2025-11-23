@@ -377,12 +377,19 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    settings_t *settings = config_get_ptr();
    runloop_state_t *runloop_st = runloop_state_get_ptr();
    size_t serialize_sz         = 0;
+   unsigned char desired_players;
 
    gekkonet_reset_state();
 
-   g_gekkonet.num_players = (settings->uints.input_max_users > 1) ? 2 : 1;
-   if (g_gekkonet.num_players == 0)
-      g_gekkonet.num_players = 1;
+   /* GekkoNet needs one local + one remote player. Ensure we always allocate
+    * for at least two slots even if the frontend is configured for a single
+    * local user. */
+   desired_players        = settings->uints.input_max_users;
+   if (desired_players < 2)
+      desired_players = 2;
+   else if (desired_players > 4)
+      desired_players = 4;
+   g_gekkonet.num_players = desired_players;
 
    if (runloop_st && runloop_st->current_core.retro_serialize_size)
       serialize_sz = runloop_st->current_core.retro_serialize_size();
