@@ -682,22 +682,20 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
          ret = true;
          break;
       case RARCH_NETPLAY_CTL_PRE_FRAME:
-         if (g_gekkonet.paused)
+         if (g_gekkonet.running)
          {
-            if (g_gekkonet.running)
+            if (g_gekkonet.paused)
             {
+               /* Keep the session breathing while paused, but don't block the runloop. */
                gekko_network_poll(g_gekkonet.session);
                gekkonet_process_game_events();
+               g_gekkonet.paused = false; /* auto-clear; runloop never sends UNPAUSE */
             }
-            ret = false;
-         }
-         else
-         {
-            if (g_gekkonet.running)
+            else
                gekkonet_step_frame();
-            /* When netplay is disabled we should not stall the runloop. */
-            ret = true;
          }
+         /* When netplay is disabled we should not stall the runloop. */
+         ret = true;
          break;
       case RARCH_NETPLAY_CTL_POST_FRAME:
          /* Post-frame polling is handled in PRE_FRAME; keep this for
