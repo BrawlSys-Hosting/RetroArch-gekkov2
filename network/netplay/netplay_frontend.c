@@ -295,12 +295,13 @@ static void gekkonet_process_game_events(void)
    int event_count       = 0;
    int session_event_cnt = 0;
    GekkoGameEvent **events = NULL;
+   int i;
 
    events = gekko_update_session(g_gekkonet.session, &event_count);
 
    if (events && event_count > 0)
    {
-      for (int i = 0; i < event_count; i++)
+      for (i = 0; i < event_count; i++)
       {
          GekkoGameEvent *evt = events[i];
          if (!evt)
