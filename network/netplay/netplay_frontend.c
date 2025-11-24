@@ -340,8 +340,51 @@ static void gekkonet_process_game_events(void)
    }
 
    /* Drain session events to avoid back pressure, even if we ignore them. */
-   (void)g_gekkonet.session;
-   (void)gekko_session_events(g_gekkonet.session, &session_event_cnt);
+   {
+      int j;
+      GekkoSessionEvent **session_events =
+         gekko_session_events(g_gekkonet.session, &session_event_cnt);
+
+      if (session_events && session_event_cnt > 0)
+      {
+         for (j = 0; j < session_event_cnt; j++)
+         {
+            GekkoSessionEvent *sevt = session_events[j];
+            if (!sevt)
+               continue;
+
+            switch (sevt->type)
+            {
+               case PlayerConnected:
+                  RARCH_LOG("[GekkoNet] Peer connected (handle %d).\n",
+                        sevt->data.connected.handle);
+                  break;
+               case PlayerDisconnected:
+                  RARCH_WARN("[GekkoNet] Peer disconnected (handle %d).\n",
+                        sevt->data.disconnected.handle);
+                  break;
+               case PlayerSyncing:
+                  RARCH_LOG("[GekkoNet] Syncing peer %d (%u/%u).\n",
+                        sevt->data.syncing.handle,
+                        sevt->data.syncing.current,
+                        sevt->data.syncing.max);
+                  break;
+               case SessionStarted:
+                  RARCH_LOG("[GekkoNet] Session synchronized.\n");
+                  break;
+               case DesyncDetected:
+                  RARCH_WARN("[GekkoNet] Desync detected at frame %d (local %u, remote %u, peer %d).\n",
+                        sevt->data.desynced.frame,
+                        sevt->data.desynced.local_checksum,
+                        sevt->data.desynced.remote_checksum,
+                        sevt->data.desynced.remote_handle);
+                  break;
+               default:
+                  break;
+            }
+         }
+      }
+   }
 }
 
 static void gekkonet_step_frame(void)
