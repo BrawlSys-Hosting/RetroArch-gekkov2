@@ -293,6 +293,7 @@ static void gekkonet_handle_save_event(GekkoGameEvent *evt)
    {
       RARCH_ERR("[GekkoNet] Serialize size %u exceeds buffer %u; cannot save state.\n",
             (unsigned)cur_serialize_sz, g_gekkonet.config.state_size);
+      RARCH_ERR("[GekkoNet] Increase rewind_buffer_size or set a larger state buffer.\n");
       return;
    }
 
@@ -492,8 +493,9 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    fallback_state_sz = settings->sizes.rewind_buffer_size ?
       (size_t)settings->sizes.rewind_buffer_size * 1024 : 0;
-   if (fallback_state_sz < (16 * 1024 * 1024))
-      fallback_state_sz = 16 * 1024 * 1024; /* default to 16 MiB to cover large states */
+   /* Use a generous default to cover large core states. */
+   if (fallback_state_sz < (32 * 1024 * 1024))
+      fallback_state_sz = 32 * 1024 * 1024; /* 32 MiB default */
 
    if (!gekko_create(&g_gekkonet.session))
    {
