@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <features/features_cpu.h>
+
 #include <boolean.h>
 #include <string/stdstring.h>
 
@@ -67,6 +69,9 @@ typedef struct gekko_netplay_state
    bool               running;
    bool               paused;
    bool               callbacks_installed;
+   bool               session_ready;
+   bool               session_warned;
+   retro_time_t       session_start_time;
    /* aggregated per-player input for the current frame */
    struct
    {
@@ -267,6 +272,10 @@ static void gekkonet_update_inputs(const GekkoGameEvent *evt)
 
    g_gekkonet.inputs_ready  = true;
    g_gekkonet.current_frame = evt->data.adv.frame;
+   RARCH_LOG("[GekkoNet] AdvanceEvent frame %d (len %u, rollback=%s).\n",
+         evt->data.adv.frame,
+         evt->data.adv.input_len,
+         evt->data.adv.rolling_back ? "yes" : "no");
 }
 
 static void gekkonet_handle_save_event(GekkoGameEvent *evt)
@@ -369,9 +378,10 @@ static void gekkonet_process_game_events(void)
                         sevt->data.syncing.current,
                         sevt->data.syncing.max);
                   break;
-               case SessionStarted:
-                  RARCH_LOG("[GekkoNet] Session synchronized.\n");
-                  break;
+            case SessionStarted:
+               g_gekkonet.session_ready = true;
+               RARCH_LOG("[GekkoNet] Session synchronized.\n");
+               break;
                case DesyncDetected:
                   RARCH_WARN("[GekkoNet] Desync detected at frame %d (local %u, remote %u, peer %d).\n",
                         sevt->data.desynced.frame,
@@ -383,6 +393,18 @@ static void gekkonet_process_game_events(void)
                   break;
             }
          }
+      }
+   }
+
+   /* Connection progress logging for clients waiting to sync */
+   if (g_gekkonet.running && !g_gekkonet.session_ready && !g_gekkonet.session_warned)
+   {
+      retro_time_t now = cpu_features_get_time_usec();
+      /* Warn if we have waited ~5 seconds without session start */
+      if (now - g_gekkonet.session_start_time > (retro_time_t)5000000)
+      {
+         RARCH_WARN("[GekkoNet] Still waiting for peer/session sync...\n");
+         g_gekkonet.session_warned = true;
       }
    }
 }
@@ -465,6 +487,9 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.is_server   = is_server;
    g_gekkonet.inputs_ready= false;
    g_gekkonet.paused      = false;
+   g_gekkonet.session_ready = false;
+   g_gekkonet.session_warned= false;
+   g_gekkonet.session_start_time = cpu_features_get_time_usec();
 
    if (!g_gekkonet.adapter)
    {
@@ -639,6 +664,10 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
    if (g_gekkonet.running)
       return true;
 
+   g_gekkonet.session_start_time = cpu_features_get_time_usec();
+   g_gekkonet.session_ready      = false;
+   g_gekkonet.session_warned     = false;
+
    if (!gekkonet_init_session(server == NULL || string_is_empty(server), server, port))
       return false;
 
@@ -672,6 +701,12 @@ void netplay_force_send_savestate(void)
 int16_t netplay_input_state(unsigned port, unsigned device,
       unsigned idx, unsigned id)
 {
+   if (!g_gekkonet.running)
+      return input_driver_state_wrapper(port, device, idx, id);
+
+   if (!g_gekkonet.inputs_ready || port >= g_gekkonet.num_players)
+      return 0;
+
    if (g_gekkonet.running && g_gekkonet.inputs_ready &&
          port < g_gekkonet.num_players)
    {
