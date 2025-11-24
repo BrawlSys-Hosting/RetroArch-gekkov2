@@ -491,11 +491,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    else
       RARCH_WARN("[GekkoNet] Core serialization size unavailable; using fallback buffer.\n");
 
-   fallback_state_sz = settings->sizes.rewind_buffer_size ?
-      (size_t)settings->sizes.rewind_buffer_size * 1024 : 0;
-   /* Use a generous default to cover large core states. */
-   if (fallback_state_sz < (32 * 1024 * 1024))
-      fallback_state_sz = 32 * 1024 * 1024; /* 32 MiB default */
+   /* Use a generous default to cover large core states. Ignore tiny rewind buffers. */
+   fallback_state_sz = 128 * 1024 * 1024; /* 128 MiB default */
 
    if (!gekko_create(&g_gekkonet.session))
    {
