@@ -492,8 +492,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    fallback_state_sz = settings->sizes.rewind_buffer_size ?
       (size_t)settings->sizes.rewind_buffer_size * 1024 : 0;
-   if (!fallback_state_sz)
-      fallback_state_sz = 1024 * 1024; /* 1 MiB default */
+   if (fallback_state_sz < (16 * 1024 * 1024))
+      fallback_state_sz = 16 * 1024 * 1024; /* default to 16 MiB to cover large states */
 
    if (!gekko_create(&g_gekkonet.session))
    {
@@ -540,11 +540,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       if (fallback_state_sz > chosen_sz)
          chosen_sz = fallback_state_sz;
       g_gekkonet.config.state_size = (unsigned)chosen_sz;
-      if (serialize_sz && serialize_sz > fallback_state_sz)
-         RARCH_LOG("[GekkoNet] Using core serialize size %u bytes for state buffer.\n",
-               (unsigned)serialize_sz);
+      if (serialize_sz)
+         RARCH_LOG("[GekkoNet] State buffer set to %u bytes (serialize size %u, fallback %u).\n",
+               (unsigned)chosen_sz, (unsigned)serialize_sz, (unsigned)fallback_state_sz);
       else
-         RARCH_LOG("[GekkoNet] Using fallback state buffer %u bytes.\n",
+         RARCH_LOG("[GekkoNet] State buffer set to %u bytes (fallback; serialize size unknown).\n",
                (unsigned)chosen_sz);
    }
    g_gekkonet.config.limited_saving          = false;
