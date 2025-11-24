@@ -188,13 +188,9 @@ net_driver_state_t *networking_state_get_ptr(void)
 
 static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
 {
-   /* Reuse cached adapter when possible to avoid repeated UDP binds. */
-   if (g_cached_adapter && g_cached_adapter_port == port)
-      return g_cached_adapter;
-
-   g_cached_adapter      = gekko_default_adapter(port);
-   g_cached_adapter_port = g_cached_adapter ? port : 0;
-   return g_cached_adapter;
+   /* Create a fresh adapter each time. The GekkoNet default adapter will bind
+    * the requested port and return NULL on failure. */
+   return gekko_default_adapter(port);
 }
 
 static void gekkonet_start_nat_traversal(unsigned short port)
@@ -458,6 +454,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    runloop_state_t *runloop_st = runloop_state_get_ptr();
    size_t serialize_sz         = 0;
    unsigned char desired_players;
+   unsigned short adapter_port  = (unsigned short)port;
 
    gekkonet_reset_state();
 
@@ -482,8 +479,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       return false;
    }
 
-   g_gekkonet.adapter     = gekkonet_get_adapter((unsigned short)port);
-   g_gekkonet.listen_port = (unsigned short)port;
+   g_gekkonet.adapter     = gekkonet_get_adapter(adapter_port);
+   g_gekkonet.listen_port = adapter_port;
    g_gekkonet.is_server   = is_server;
    g_gekkonet.inputs_ready= false;
    g_gekkonet.paused      = false;
@@ -493,8 +490,21 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    if (!g_gekkonet.adapter)
    {
-      RARCH_ERR("[GekkoNet] Failed to create default adapter on port %u.\n", port);
-      return false;
+      if (!is_server)
+      {
+         /* Client fallback: let OS choose a free port if the requested one is busy. */
+         adapter_port       = 0;
+         g_gekkonet.adapter = gekkonet_get_adapter(adapter_port);
+         g_gekkonet.listen_port = adapter_port;
+         if (g_gekkonet.adapter)
+            RARCH_WARN("[GekkoNet] Requested client port %u in use; falling back to ephemeral port.\n", port);
+      }
+
+      if (!g_gekkonet.adapter)
+      {
+         RARCH_ERR("[GekkoNet] Failed to create default adapter on port %u.\n", port);
+         return false;
+      }
    }
 
    memset(&g_gekkonet.config, 0, sizeof(g_gekkonet.config));
@@ -541,7 +551,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    gekko_start(g_gekkonet.session, &g_gekkonet.config);
    g_gekkonet.running = true;
 
-   RARCH_LOG("[GekkoNet] Netplay session started on port %u (%s).\n", port,
+   RARCH_LOG("[GekkoNet] Netplay session started on port %u (%s).\n", adapter_port,
          is_server ? "host" : "client");
 
    return true;
