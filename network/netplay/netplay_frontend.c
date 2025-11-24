@@ -277,12 +277,24 @@ static void gekkonet_update_inputs(const GekkoGameEvent *evt)
 static void gekkonet_handle_save_event(GekkoGameEvent *evt)
 {
    unsigned int written = 0;
+   size_t cur_serialize_sz = 0;
+   runloop_state_t *runloop_st = runloop_state_get_ptr();
 
    if (!evt)
       return;
 
    if (!g_gekkonet.config.state_size)
       return;
+
+   if (runloop_st && runloop_st->current_core.retro_serialize_size)
+      cur_serialize_sz = runloop_st->current_core.retro_serialize_size();
+
+   if (cur_serialize_sz > g_gekkonet.config.state_size)
+   {
+      RARCH_ERR("[GekkoNet] Serialize size %u exceeds buffer %u; cannot save state.\n",
+            (unsigned)cur_serialize_sz, g_gekkonet.config.state_size);
+      return;
+   }
 
    if (!gekkonet_serialize_state(evt->data.save.state,
             g_gekkonet.config.state_size, &written))
@@ -291,6 +303,7 @@ static void gekkonet_handle_save_event(GekkoGameEvent *evt)
          *evt->data.save.state_len = 0;
       if (evt->data.save.checksum)
          *evt->data.save.checksum = 0;
+      RARCH_ERR("[GekkoNet] Serialize failed for frame %d.\n", evt->data.save.frame);
       return;
    }
 
@@ -308,6 +321,9 @@ static void gekkonet_handle_load_event(GekkoGameEvent *evt)
    if (!gekkonet_load_state(evt->data.load.state, evt->data.load.state_len))
       RARCH_ERR("[GekkoNet] Failed to load state for frame %d.\n",
             evt->data.load.frame);
+   else
+      RARCH_LOG("[GekkoNet] Loaded state for frame %d (len %u).\n",
+            evt->data.load.frame, evt->data.load.state_len);
 }
 
 static void gekkonet_process_game_events(void)
@@ -453,6 +469,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    settings_t *settings = config_get_ptr();
    runloop_state_t *runloop_st = runloop_state_get_ptr();
    size_t serialize_sz         = 0;
+   size_t fallback_state_sz    = 0;
    unsigned char desired_players;
    unsigned short adapter_port  = (unsigned short)port;
 
@@ -472,6 +489,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       serialize_sz = runloop_st->current_core.retro_serialize_size();
    else
       RARCH_WARN("[GekkoNet] Core serialization size unavailable; using fallback buffer.\n");
+
+   fallback_state_sz = settings->sizes.rewind_buffer_size ?
+      (size_t)settings->sizes.rewind_buffer_size * 1024 : 0;
+   if (!fallback_state_sz)
+      fallback_state_sz = 1024 * 1024; /* 1 MiB default */
 
    if (!gekko_create(&g_gekkonet.session))
    {
@@ -513,8 +535,18 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.config.input_prediction_window = 2;
    g_gekkonet.config.spectator_delay         = 0;
    g_gekkonet.config.input_size              = sizeof(uint16_t) + sizeof(int16_t) * 2;
-   g_gekkonet.config.state_size              = serialize_sz ? (unsigned)serialize_sz
-         : (unsigned)(settings->sizes.rewind_buffer_size * 1024);
+   {
+      size_t chosen_sz = serialize_sz;
+      if (fallback_state_sz > chosen_sz)
+         chosen_sz = fallback_state_sz;
+      g_gekkonet.config.state_size = (unsigned)chosen_sz;
+      if (serialize_sz && serialize_sz > fallback_state_sz)
+         RARCH_LOG("[GekkoNet] Using core serialize size %u bytes for state buffer.\n",
+               (unsigned)serialize_sz);
+      else
+         RARCH_LOG("[GekkoNet] Using fallback state buffer %u bytes.\n",
+               (unsigned)chosen_sz);
+   }
    g_gekkonet.config.limited_saving          = false;
    g_gekkonet.config.post_sync_joining       = false;
    g_gekkonet.config.desync_detection        = true;
@@ -711,14 +743,20 @@ void netplay_force_send_savestate(void)
 int16_t netplay_input_state(unsigned port, unsigned device,
       unsigned idx, unsigned id)
 {
+   /* If netplay is disabled, just use local input. */
    if (!g_gekkonet.running)
       return input_driver_state_wrapper(port, device, idx, id);
 
-   if (!g_gekkonet.inputs_ready || port >= g_gekkonet.num_players)
+   /* If we haven't received aggregated inputs yet, fall back to local input
+    * for the first player so gameplay isn't blocked while syncing. */
+   if (!g_gekkonet.inputs_ready)
+   {
+      if (port == 0)
+         return input_driver_state_wrapper(port, device, idx, id);
       return 0;
+   }
 
-   if (g_gekkonet.running && g_gekkonet.inputs_ready &&
-         port < g_gekkonet.num_players)
+   if (port < g_gekkonet.num_players)
    {
       uint16_t buttons = g_gekkonet.player_inputs[port].buttons;
       switch (device)

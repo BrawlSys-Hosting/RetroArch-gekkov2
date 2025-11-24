@@ -9022,6 +9022,22 @@ unsigned menu_displaylist_build_list(
          break;
       case DISPLAYLIST_NETWORK_SETTINGS_LIST:
          {
+            /* GekkoNet: only direct connect settings. */
+            static const menu_displaylist_build_info_t build_list[] = {
+               {MENU_ENUM_LABEL_NETPLAY_IP_ADDRESS,   PARSE_ONLY_STRING},
+               {MENU_ENUM_LABEL_NETPLAY_TCP_UDP_PORT, PARSE_ONLY_UINT},
+               {MENU_ENUM_LABEL_NETPLAY_NICKNAME,     PARSE_ONLY_STRING},
+            };
+
+            for (i = 0; i < ARRAY_SIZE(build_list); i++)
+            {
+               if (MENU_DISPLAYLIST_PARSE_SETTINGS_ENUM(list,
+                        build_list[i].enum_idx, build_list[i].parse_type,
+                        false) == 0)
+                  count++;
+            }
+
+#if 0 /* Legacy netplay settings hidden for GekkoNet */
             unsigned user;
             bool netplay_allow_slaves    = settings->bools.netplay_allow_slaves;
             bool netplay_use_mitm_server = settings->bools.netplay_use_mitm_server;
@@ -9130,6 +9146,7 @@ unsigned menu_displaylist_build_list(
                   MENU_ENUM_LABEL_STDIN_CMD_ENABLE,
                   PARSE_ONLY_BOOL, false) == 0)
                count++;
+#endif
          }
          break;
       case DISPLAYLIST_NETPLAY_LOBBY_FILTERS_LIST:
