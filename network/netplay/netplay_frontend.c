@@ -556,7 +556,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
                (unsigned)chosen_sz);
    }
    g_gekkonet.config.limited_saving          = false;
-   g_gekkonet.config.post_sync_joining       = false;
+   /* Allow late joiners to receive the host savestate during sync. */
+   g_gekkonet.config.post_sync_joining       = true;
    g_gekkonet.config.desync_detection        = true;
 
    if (!g_gekkonet.config.state_size)
