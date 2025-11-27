@@ -72,6 +72,9 @@ typedef struct gekko_netplay_state
    bool               session_ready;
    bool               session_warned;
    bool               awaiting_peer_state;
+   bool               connect_logged;
+   bool               connect_failed;
+   bool               verbose_logging;
    retro_time_t       session_start_time;
    /* aggregated per-player input for the current frame */
    struct
@@ -270,12 +273,15 @@ static void gekkonet_update_inputs(const GekkoGameEvent *evt)
          memcpy(&g_gekkonet.player_inputs[i],
                evt->data.adv.inputs + offset,
                sizeof(g_gekkonet.player_inputs[i]));
-         RARCH_LOG("[GekkoNet] Frame %d P%u inputs: buttons=0x%04x lx=%d ly=%d\n",
-               evt->data.adv.frame,
-               i,
-               g_gekkonet.player_inputs[i].buttons,
-               g_gekkonet.player_inputs[i].lx,
-               g_gekkonet.player_inputs[i].ly);
+         if (g_gekkonet.verbose_logging)
+         {
+            RARCH_LOG("[GekkoNet] Frame %d P%u inputs: buttons=0x%04x lx=%d ly=%d\n",
+                  evt->data.adv.frame,
+                  i,
+                  g_gekkonet.player_inputs[i].buttons,
+                  g_gekkonet.player_inputs[i].lx,
+                  g_gekkonet.player_inputs[i].ly);
+         }
       }
    }
 
@@ -415,6 +421,10 @@ static void gekkonet_process_game_events(void)
                   RARCH_LOG("[GekkoNet] Peer sync complete; waiting for first input/state...\n");
                RARCH_LOG("[GekkoNet] Session synchronized.\n");
                break;
+            case PlayerDisconnected:
+               g_gekkonet.connect_failed = true;
+               RARCH_WARN("[GekkoNet] Peer disconnected before sync.\n");
+               break;
                case DesyncDetected:
                   RARCH_WARN("[GekkoNet] Desync detected at frame %d (local %u, remote %u, peer %d).\n",
                         sevt->data.desynced.frame,
@@ -438,6 +448,15 @@ static void gekkonet_process_game_events(void)
       {
          RARCH_WARN("[GekkoNet] Still waiting for peer/session sync...\n");
          g_gekkonet.session_warned = true;
+      }
+   }
+   if (g_gekkonet.running && !g_gekkonet.connect_failed && g_gekkonet.session_ready == false)
+   {
+      retro_time_t now = cpu_features_get_time_usec();
+      if (now - g_gekkonet.session_start_time > (retro_time_t)10000000)
+      {
+         g_gekkonet.connect_failed = true;
+         RARCH_WARN("[GekkoNet] Connection attempt timed out.\n");
       }
    }
 }
@@ -477,6 +496,15 @@ static void gekkonet_step_frame(void)
 
    gekko_network_poll(g_gekkonet.session);
    gekkonet_process_game_events();
+
+   if (g_gekkonet.verbose_logging && g_gekkonet.remote_handle >= 0)
+   {
+      GekkoNetworkStats stats = {0};
+      gekko_network_stats(g_gekkonet.session, g_gekkonet.remote_handle, &stats);
+      RARCH_LOG("[GekkoNet] Net stats: last_ping=%u avg_ping=%.2f jitter=%.2f frames_ahead=%.2f\n",
+            stats.last_ping, stats.avg_ping, stats.jitter,
+            gekko_frames_ahead(g_gekkonet.session));
+   }
 }
 
 static uint16_t gekkonet_read_buttons(void)
@@ -531,6 +559,9 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.session_ready = false;
    g_gekkonet.session_warned= false;
    g_gekkonet.awaiting_peer_state = is_server;
+   g_gekkonet.connect_logged = false;
+   g_gekkonet.connect_failed = false;
+   g_gekkonet.verbose_logging = true;
    g_gekkonet.session_start_time = cpu_features_get_time_usec();
 
    if (!g_gekkonet.adapter)
