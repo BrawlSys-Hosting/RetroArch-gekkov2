@@ -103,6 +103,7 @@ typedef struct gekko_netplay_state
 
 static net_driver_state_t networking_driver_st;
 static gekko_netplay_state_t g_gekkonet;
+static struct gekkonet_udp_adapter *g_custom_adapter;
 /* Netplay hosting now requires an explicit user request (via menu/hotkey).
  * Track when a host start was actually asked for so we can ignore any
  * implicit/automatic initialization attempts. */
@@ -255,7 +256,7 @@ static void gekkonet_free_data(void* data_ptr)
 
 static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
 {
-   gekkonet_udp_adapter_t *adp = (gekkonet_udp_adapter_t*)malloc(sizeof(*adp));
+   gekkonet_udp_adapter_t *adp = (gekkonet_udp_adapter_t*)calloc(1, sizeof(*adp));
    struct sockaddr_in addr4;
    int sockfd;
 
@@ -739,8 +740,13 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    }
 
    {
-      gekkonet_udp_adapter_t *custom = gekkonet_create_udp_adapter(adapter_port);
-      if (!custom)
+      if (g_custom_adapter)
+      {
+         free(g_custom_adapter);
+         g_custom_adapter = NULL;
+      }
+      g_custom_adapter = gekkonet_create_udp_adapter(adapter_port);
+      if (!g_custom_adapter)
       {
          RARCH_ERR("[GekkoNet] Failed to create UDP adapter on port %u.\n", adapter_port);
          return false;
@@ -751,11 +757,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       {
          struct sockaddr_in sin;
          socklen_t slen = sizeof(sin);
-         if (getsockname(custom->sockfd, (struct sockaddr*)&sin, &slen) == 0)
+         if (getsockname(g_custom_adapter->sockfd, (struct sockaddr*)&sin, &slen) == 0)
             adapter_port = ntohs(sin.sin_port);
       }
 
-      g_gekkonet.adapter     = &custom->api;
+      g_gekkonet.adapter     = &g_custom_adapter->api;
       g_gekkonet.listen_port = adapter_port;
    }
    g_gekkonet.is_server   = is_server;
@@ -769,25 +775,6 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.connect_failed = false;
    g_gekkonet.verbose_logging = true;
    g_gekkonet.session_start_time = cpu_features_get_time_usec();
-
-   if (!g_gekkonet.adapter)
-   {
-      if (!is_server)
-      {
-         /* Client fallback: let OS choose a free port if the requested one is busy. */
-         adapter_port       = 0;
-         g_gekkonet.adapter = gekkonet_get_adapter(adapter_port);
-         g_gekkonet.listen_port = adapter_port;
-         if (g_gekkonet.adapter)
-            RARCH_WARN("[GekkoNet] Requested client port %u in use; falling back to ephemeral port.\n", port);
-      }
-
-      if (!g_gekkonet.adapter)
-      {
-         RARCH_ERR("[GekkoNet] Failed to create default adapter on port %u.\n", port);
-         return false;
-      }
-   }
 
    memset(&g_gekkonet.config, 0, sizeof(g_gekkonet.config));
    g_gekkonet.config.num_players             = g_gekkonet.num_players;
@@ -843,7 +830,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    if (g_gekkonet.local_handle < 0 || g_gekkonet.remote_handle < 0)
    {
-      RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d).\n",
+      RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d) with custom adapter.\n",
             g_gekkonet.local_handle, g_gekkonet.remote_handle);
       return false;
    }
@@ -870,6 +857,11 @@ static void gekkonet_shutdown(void)
 
    if (g_gekkonet.session)
       gekko_destroy(g_gekkonet.session);
+   if (g_custom_adapter)
+   {
+      free(g_custom_adapter);
+      g_custom_adapter = NULL;
+   }
 
    gekkonet_uninstall_callbacks();
    gekkonet_free_remote_addr();
