@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#include <fcntl.h>
 #include <features/features_cpu.h>
 
 #include <boolean.h>
@@ -38,6 +39,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#define closesocket close
 #endif
 
 /* Forward declarations from runloop.c */
@@ -72,10 +76,15 @@ typedef struct gekko_netplay_state
    bool               session_ready;
    bool               session_warned;
    bool               awaiting_peer_state;
+   bool               awaiting_state_load;
    bool               connect_logged;
    bool               connect_failed;
    bool               verbose_logging;
    retro_time_t       session_start_time;
+   int                sockfd;
+   struct sockaddr_storage peer_addr;
+   socklen_t          peer_len;
+   bool               has_peer_addr;
    /* aggregated per-player input for the current frame */
    struct
    {
@@ -127,6 +136,176 @@ static unsigned gekkonet_local_port(void)
 
 static uint16_t gekkonet_read_buttons(void);
 
+/* ------------------------------------------------------------------------- */
+/* Custom UDP adapter we own so we can observe endpoints. */
+typedef struct gekkonet_udp_adapter
+{
+   GekkoNetAdapter api;
+   int sockfd;
+   unsigned short bound_port;
+} gekkonet_udp_adapter_t;
+
+static void gekkonet_set_peer_addr(const struct sockaddr_storage *addr, socklen_t len)
+{
+   if (!addr || len == 0)
+      return;
+   memcpy(&g_gekkonet.peer_addr, addr, len);
+   g_gekkonet.peer_len      = len;
+   g_gekkonet.has_peer_addr = true;
+}
+
+static void gekkonet_send_data(GekkoNetAddress* addr, const char* data, int length)
+{
+   struct sockaddr_storage target_addr;
+   socklen_t target_len = 0;
+
+   if (!data || length <= 0 || g_gekkonet.sockfd < 0)
+      return;
+
+   if (addr && addr->data && addr->size <= sizeof(target_addr))
+   {
+      memcpy(&target_addr, addr->data, addr->size);
+      target_len = (socklen_t)addr->size;
+   }
+   else if (g_gekkonet.has_peer_addr)
+   {
+      memcpy(&target_addr, &g_gekkonet.peer_addr, g_gekkonet.peer_len);
+      target_len = g_gekkonet.peer_len;
+   }
+
+   if (!target_len)
+      return;
+
+   sendto(g_gekkonet.sockfd, data, (size_t)length, 0,
+         (struct sockaddr*)&target_addr, target_len);
+}
+
+static GekkoNetResult** gekkonet_receive_data(int* length)
+{
+   static GekkoNetResult* results[32];
+   int count = 0;
+   char buf[1500];
+   struct sockaddr_storage src_addr;
+   socklen_t src_len = sizeof(src_addr);
+   int recvlen;
+
+   if (length)
+      *length = 0;
+
+   if (g_gekkonet.sockfd < 0)
+      return NULL;
+
+   memset(results, 0, sizeof(results));
+
+   for (;;)
+   {
+      recvlen = (int)recvfrom(g_gekkonet.sockfd, buf, sizeof(buf), 0,
+            (struct sockaddr*)&src_addr, &src_len);
+      if (recvlen <= 0)
+         break;
+
+      if (count >= 32)
+         break;
+
+      /* Capture peer addr for host if not already set */
+      if (!g_gekkonet.has_peer_addr)
+         gekkonet_set_peer_addr(&src_addr, src_len);
+
+      results[count] = (GekkoNetResult*)malloc(sizeof(GekkoNetResult));
+      if (!results[count])
+         break;
+
+      results[count]->data = malloc((size_t)recvlen);
+      results[count]->data_len = (unsigned int)recvlen;
+      results[count]->addr.data = malloc(src_len);
+      results[count]->addr.size = (unsigned int)src_len;
+
+      if (!results[count]->data || !results[count]->addr.data)
+      {
+         if (results[count]->data) free(results[count]->data);
+         if (results[count]->addr.data) free(results[count]->addr.data);
+         free(results[count]);
+         results[count] = NULL;
+         break;
+      }
+
+      memcpy(results[count]->data, buf, (size_t)recvlen);
+      memcpy(results[count]->addr.data, &src_addr, src_len);
+
+      count++;
+   }
+
+   if (length)
+      *length = count;
+
+   return count ? results : NULL;
+}
+
+static void gekkonet_free_data(void* data_ptr)
+{
+   GekkoNetResult* res = (GekkoNetResult*)data_ptr;
+   if (!res)
+      return;
+   if (res->data)
+      free(res->data);
+   if (res->addr.data)
+      free(res->addr.data);
+   free(res);
+}
+
+static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
+{
+   gekkonet_udp_adapter_t *adp = (gekkonet_udp_adapter_t*)malloc(sizeof(*adp));
+   struct sockaddr_in addr4;
+   int sockfd;
+
+   if (!adp)
+      return NULL;
+
+   sockfd = (int)socket(AF_INET, SOCK_DGRAM, 0);
+   if (sockfd < 0)
+   {
+      free(adp);
+      return NULL;
+   }
+
+#ifdef _WIN32
+   {
+      u_long mode = 1;
+      ioctlsocket(sockfd, FIONBIO, &mode);
+   }
+#else
+   {
+      int flags = fcntl(sockfd, F_GETFL, 0);
+      fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+   }
+#endif
+
+   memset(&addr4, 0, sizeof(addr4));
+   addr4.sin_family      = AF_INET;
+   addr4.sin_addr.s_addr = htonl(INADDR_ANY);
+   addr4.sin_port        = htons(port);
+
+   if (bind(sockfd, (struct sockaddr*)&addr4, sizeof(addr4)) != 0)
+   {
+      closesocket(sockfd);
+      free(adp);
+      return NULL;
+   }
+
+   adp->sockfd                   = sockfd;
+   adp->bound_port               = port;
+   adp->api.send_data            = gekkonet_send_data;
+   adp->api.receive_data         = gekkonet_receive_data;
+   adp->api.free_data            = gekkonet_free_data;
+
+   g_gekkonet.sockfd        = sockfd;
+   g_gekkonet.has_peer_addr = false;
+   g_gekkonet.peer_len      = 0;
+
+   return adp;
+}
+
 static void gekkonet_install_callbacks(void)
 {
    if (g_gekkonet.callbacks_installed)
@@ -158,6 +337,7 @@ static void gekkonet_reset_state(void)
 {
    gekkonet_free_remote_addr();
    memset(&g_gekkonet, 0, sizeof(g_gekkonet));
+   g_gekkonet.sockfd = -1;
 }
 
 static bool gekkonet_serialize_state(unsigned char *dst,
@@ -198,9 +378,8 @@ net_driver_state_t *networking_state_get_ptr(void)
 
 static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
 {
-   /* Create a fresh adapter each time. The GekkoNet default adapter will bind
-    * the requested port and return NULL on failure. */
-   return gekko_default_adapter(port);
+   /* We use a custom UDP adapter that we own so we can observe peers. */
+   return NULL;
 }
 
 static void gekkonet_start_nat_traversal(unsigned short port)
@@ -249,6 +428,12 @@ static bool gekkonet_resolve_remote(const char *server, unsigned port)
 
    memcpy(g_gekkonet.remote_addr.data, res->ai_addr, res->ai_addrlen);
    g_gekkonet.remote_addr.size = (unsigned int)res->ai_addrlen;
+
+   RARCH_LOG("[GekkoNet] Resolved remote host '%s' to %s:%s.\n",
+         server,
+         res->ai_family == AF_INET ?
+            inet_ntoa(((struct sockaddr_in*)res->ai_addr)->sin_addr) : "addr",
+         port_buf);
 
    freeaddrinfo(res);
    return true;
@@ -378,6 +563,8 @@ static void gekkonet_process_game_events(void)
                break;
             case LoadEvent:
                gekkonet_handle_load_event(evt);
+               /* Client received initial state; allow frames to advance. */
+               g_gekkonet.awaiting_state_load = false;
                break;
             default:
                break;
@@ -418,6 +605,9 @@ static void gekkonet_process_game_events(void)
                   break;
             case SessionStarted:
                g_gekkonet.session_ready = true;
+               /* Client waits for a LoadEvent before advancing. */
+               if (!g_gekkonet.is_server)
+                  g_gekkonet.awaiting_state_load = true;
                if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
                   RARCH_LOG("[GekkoNet] Peer sync complete; waiting for first input/state...\n");
                RARCH_LOG("[GekkoNet] Session synchronized.\n");
@@ -548,14 +738,33 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       return false;
    }
 
-   g_gekkonet.adapter     = gekkonet_get_adapter(adapter_port);
-   g_gekkonet.listen_port = adapter_port;
+   {
+      gekkonet_udp_adapter_t *custom = gekkonet_create_udp_adapter(adapter_port);
+      if (!custom)
+      {
+         RARCH_ERR("[GekkoNet] Failed to create UDP adapter on port %u.\n", adapter_port);
+         return false;
+      }
+
+      /* If bound to port 0, fetch the actual port. */
+      if (adapter_port == 0)
+      {
+         struct sockaddr_in sin;
+         socklen_t slen = sizeof(sin);
+         if (getsockname(custom->sockfd, (struct sockaddr*)&sin, &slen) == 0)
+            adapter_port = ntohs(sin.sin_port);
+      }
+
+      g_gekkonet.adapter     = &custom->api;
+      g_gekkonet.listen_port = adapter_port;
+   }
    g_gekkonet.is_server   = is_server;
    g_gekkonet.inputs_ready= false;
    g_gekkonet.paused      = false;
    g_gekkonet.session_ready = false;
    g_gekkonet.session_warned= false;
    g_gekkonet.awaiting_peer_state = is_server;
+   g_gekkonet.awaiting_state_load = !is_server;
    g_gekkonet.connect_logged = false;
    g_gekkonet.connect_failed = false;
    g_gekkonet.verbose_logging = true;
@@ -632,6 +841,13 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
             &g_gekkonet.remote_addr);
    }
 
+   if (g_gekkonet.local_handle < 0 || g_gekkonet.remote_handle < 0)
+   {
+      RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d).\n",
+            g_gekkonet.local_handle, g_gekkonet.remote_handle);
+      return false;
+   }
+
    gekko_start(g_gekkonet.session, &g_gekkonet.config);
    g_gekkonet.running = true;
 
@@ -645,6 +861,12 @@ static void gekkonet_shutdown(void)
 {
    if (g_gekkonet.adapter || g_gekkonet.session)
       RARCH_LOG("[GekkoNet] Shutting down session.\n");
+
+   if (g_gekkonet.sockfd >= 0)
+   {
+      closesocket(g_gekkonet.sockfd);
+      g_gekkonet.sockfd = -1;
+   }
 
    if (g_gekkonet.session)
       gekko_destroy(g_gekkonet.session);
@@ -751,7 +973,10 @@ bool init_netplay(const char *server, unsigned port, const char *mitm_session)
 
    /* Only honor host startup when explicitly requested. */
    if ((server == NULL || string_is_empty(server)) && !g_host_start_requested)
+   {
+      RARCH_ERR("[GekkoNet] No host address provided for client session.\n");
       return false;
+   }
 
    g_host_start_requested = false;
 
@@ -897,6 +1122,14 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
             else if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
             {
                /* Host: wait for peer state/input before advancing frames. */
+               gekko_network_poll(g_gekkonet.session);
+               gekkonet_process_game_events();
+               ret = false;
+               break;
+            }
+            else if (!g_gekkonet.is_server && g_gekkonet.awaiting_state_load)
+            {
+               /* Client: wait for initial LoadEvent before advancing. */
                gekko_network_poll(g_gekkonet.session);
                gekkonet_process_game_events();
                ret = false;
