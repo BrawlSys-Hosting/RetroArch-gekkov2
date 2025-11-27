@@ -71,6 +71,7 @@ typedef struct gekko_netplay_state
    bool               callbacks_installed;
    bool               session_ready;
    bool               session_warned;
+   bool               awaiting_peer_state;
    retro_time_t       session_start_time;
    /* aggregated per-player input for the current frame */
    struct
@@ -269,6 +270,12 @@ static void gekkonet_update_inputs(const GekkoGameEvent *evt)
          memcpy(&g_gekkonet.player_inputs[i],
                evt->data.adv.inputs + offset,
                sizeof(g_gekkonet.player_inputs[i]));
+         RARCH_LOG("[GekkoNet] Frame %d P%u inputs: buttons=0x%04x lx=%d ly=%d\n",
+               evt->data.adv.frame,
+               i,
+               g_gekkonet.player_inputs[i].buttons,
+               g_gekkonet.player_inputs[i].lx,
+               g_gekkonet.player_inputs[i].ly);
       }
    }
 
@@ -354,6 +361,11 @@ static void gekkonet_process_game_events(void)
          {
             case AdvanceEvent:
                gekkonet_update_inputs(evt);
+               if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
+               {
+                  g_gekkonet.awaiting_peer_state = false;
+                  RARCH_LOG("[GekkoNet] Peer state/input received; resuming host frames.\n");
+               }
                break;
             case SaveEvent:
                gekkonet_handle_save_event(evt);
@@ -399,6 +411,8 @@ static void gekkonet_process_game_events(void)
                   break;
             case SessionStarted:
                g_gekkonet.session_ready = true;
+               if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
+                  RARCH_LOG("[GekkoNet] Peer sync complete; waiting for first input/state...\n");
                RARCH_LOG("[GekkoNet] Session synchronized.\n");
                break;
                case DesyncDetected:
@@ -516,6 +530,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.paused      = false;
    g_gekkonet.session_ready = false;
    g_gekkonet.session_warned= false;
+   g_gekkonet.awaiting_peer_state = is_server;
    g_gekkonet.session_start_time = cpu_features_get_time_usec();
 
    if (!g_gekkonet.adapter)
@@ -850,6 +865,14 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
                gekko_network_poll(g_gekkonet.session);
                gekkonet_process_game_events();
                g_gekkonet.paused = false; /* auto-clear; runloop never sends UNPAUSE */
+            }
+            else if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
+            {
+               /* Host: wait for peer state/input before advancing frames. */
+               gekko_network_poll(g_gekkonet.session);
+               gekkonet_process_game_events();
+               ret = false;
+               break;
             }
             else
                gekkonet_step_frame();
