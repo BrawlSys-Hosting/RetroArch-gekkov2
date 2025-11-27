@@ -408,6 +408,7 @@ static void gekkonet_process_game_events(void)
                case PlayerDisconnected:
                   RARCH_WARN("[GekkoNet] Peer disconnected (handle %d).\n",
                         sevt->data.disconnected.handle);
+                  g_gekkonet.connect_failed = true;
                   break;
                case PlayerSyncing:
                   RARCH_LOG("[GekkoNet] Syncing peer %d (%u/%u).\n",
@@ -420,10 +421,6 @@ static void gekkonet_process_game_events(void)
                if (g_gekkonet.is_server && g_gekkonet.awaiting_peer_state)
                   RARCH_LOG("[GekkoNet] Peer sync complete; waiting for first input/state...\n");
                RARCH_LOG("[GekkoNet] Session synchronized.\n");
-               break;
-            case PlayerDisconnected:
-               g_gekkonet.connect_failed = true;
-               RARCH_WARN("[GekkoNet] Peer disconnected before sync.\n");
                break;
                case DesyncDetected:
                   RARCH_WARN("[GekkoNet] Desync detected at frame %d (local %u, remote %u, peer %d).\n",
