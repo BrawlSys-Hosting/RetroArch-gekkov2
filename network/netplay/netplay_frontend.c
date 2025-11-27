@@ -115,6 +115,12 @@ static uint32_t gekkonet_checksum(const unsigned char *data, unsigned int len)
    return hash;
 }
 
+static unsigned gekkonet_local_port(void)
+{
+   /* Host controls player 1 (port 0), client controls player 2 (port 1). */
+   return g_gekkonet.is_server ? 0 : 1;
+}
+
 static uint16_t gekkonet_read_buttons(void);
 
 static void gekkonet_install_callbacks(void)
@@ -429,10 +435,11 @@ static void gekkonet_step_frame(void)
 
    /* Push local inputs for this frame, then advance the session. */
    {
+      unsigned local_port = gekkonet_local_port();
       uint16_t buttons = gekkonet_read_buttons();
-      int16_t lx       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
+      int16_t lx       = input_driver_state_wrapper(local_port, RETRO_DEVICE_ANALOG,
             RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X);
-      int16_t ly       = input_driver_state_wrapper(0, RETRO_DEVICE_ANALOG,
+      int16_t ly       = input_driver_state_wrapper(local_port, RETRO_DEVICE_ANALOG,
             RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y);
 
       struct
@@ -461,7 +468,9 @@ static void gekkonet_step_frame(void)
 static uint16_t gekkonet_read_buttons(void)
 {
    /* Use joypad mask for player 0 */
-   return (uint16_t)input_driver_state_wrapper(0, RETRO_DEVICE_JOYPAD,
+   unsigned local_port = gekkonet_local_port();
+   /* Use joypad mask for the appropriate local player */
+   return (uint16_t)input_driver_state_wrapper(local_port, RETRO_DEVICE_JOYPAD,
             0, RETRO_DEVICE_ID_JOYPAD_MASK);
 }
 
@@ -547,7 +556,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
                (unsigned)chosen_sz);
    }
    g_gekkonet.config.limited_saving          = false;
-   g_gekkonet.config.post_sync_joining       = false;
+   /* Allow late joiners to receive the host savestate during sync. */
+   g_gekkonet.config.post_sync_joining       = true;
    g_gekkonet.config.desync_detection        = true;
 
    if (!g_gekkonet.config.state_size)
@@ -750,8 +760,9 @@ int16_t netplay_input_state(unsigned port, unsigned device,
     * for the first player so gameplay isn't blocked while syncing. */
    if (!g_gekkonet.inputs_ready)
    {
-      if (port == 0)
-         return input_driver_state_wrapper(port, device, idx, id);
+      unsigned local_port = gekkonet_local_port();
+      if (port == local_port)
+         return input_driver_state_wrapper(local_port, device, idx, id);
       return 0;
    }
 
