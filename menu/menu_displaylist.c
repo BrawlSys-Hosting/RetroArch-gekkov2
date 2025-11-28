@@ -13062,10 +13062,37 @@ bool menu_displaylist_ctl(enum menu_displaylist_ctl_state type,
             /* TODO/FIXME ? */
             break;
          case DISPLAYLIST_NETPLAY:
+         {
+            bool is_running = netplay_driver_ctl(RARCH_NETPLAY_CTL_IS_CONNECTED, NULL);
+
             menu_entries_clear(info->list);
+
+            if (!is_running)
+            {
+               menu_entries_append(info->list,
+                     msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_ENABLE_HOST),
+                     msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_ENABLE_HOST),
+                     MENU_ENUM_LABEL_NETPLAY_ENABLE_HOST,
+                     FILE_TYPE_NONE, 0, 0, NULL);
+
+               menu_entries_append(info->list,
+                     msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_ENABLE_CLIENT),
+                     msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_ENABLE_CLIENT),
+                     MENU_ENUM_LABEL_NETPLAY_ENABLE_CLIENT,
+                     FILE_TYPE_NONE, 0, 0, NULL);
+            }
+            else
+            {
+               menu_entries_append(info->list,
+                     msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NETPLAY_DISCONNECT),
+                     msg_hash_to_str(MENU_ENUM_LABEL_NETPLAY_DISCONNECT),
+                     MENU_ENUM_LABEL_NETPLAY_DISCONNECT,
+                     FILE_TYPE_NONE, 0, 0, NULL);
+            }
+
             info->flags |= MD_FLAG_NEED_PUSH;
-            /* TODO/FIXME ? */
             break;
+         }
          case DISPLAYLIST_INFORMATION:
             menu_entries_clear(info->list);
             if (settings)

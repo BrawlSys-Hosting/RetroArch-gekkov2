@@ -86,6 +86,7 @@ typedef struct gekko_netplay_state
    bool               callbacks_installed;
    bool               session_ready;
    bool               session_warned;
+   bool               awaiting_remote_actor;
    bool               awaiting_peer_state;
    bool               awaiting_state_load;
    bool               connect_logged;
@@ -141,6 +142,7 @@ static unsigned gekkonet_local_port(void)
 
 static uint16_t gekkonet_read_buttons(void);
 static bool gekkonet_resolve_remote(const char *server, unsigned port);
+static bool gekkonet_try_start_host(void);
 
 /* ------------------------------------------------------------------------- */
 /* Custom UDP adapter we own so we can observe endpoints. */
@@ -500,10 +502,10 @@ static bool gekkonet_add_actors(bool is_server, const char *server, unsigned por
 
    if (is_server)
    {
-      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer, NULL);
-      if (g_gekkonet.remote_handle >= 0)
-         gekkonet_start_nat_traversal((unsigned short)port);
-      return g_gekkonet.remote_handle >= 0;
+      /* Host: wait until we know the client's address before adding the remote actor. */
+      g_gekkonet.awaiting_remote_actor = true;
+      g_gekkonet.remote_handle = -1;
+      return true;
    }
 
    if (!g_gekkonet.remote_addr.data && !gekkonet_resolve_remote(server, port))
@@ -513,6 +515,54 @@ static bool gekkonet_add_actors(bool is_server, const char *server, unsigned por
          &g_gekkonet.remote_addr);
 
    return g_gekkonet.remote_handle >= 0;
+}
+
+static bool gekkonet_try_start_host(void)
+{
+   /* Host path: wait until we learn the peer address, then add remote actor and start. */
+   if (!g_gekkonet.awaiting_remote_actor)
+      return false;
+
+   if (!g_gekkonet.has_peer_addr || g_gekkonet.peer_len == 0)
+      return false;
+
+   if (!g_gekkonet.session || !g_gekkonet.adapter)
+      return false;
+
+   /* Rebuild remote address from the captured peer endpoint. */
+   gekkonet_free_remote_addr();
+   g_gekkonet.remote_addr.data = malloc(g_gekkonet.peer_len);
+   if (!g_gekkonet.remote_addr.data)
+   {
+      RARCH_ERR("[GekkoNet] Failed to allocate remote address buffer for host peer.\n");
+      return false;
+   }
+
+   memcpy(g_gekkonet.remote_addr.data, &g_gekkonet.peer_addr, g_gekkonet.peer_len);
+   g_gekkonet.remote_addr.size = (unsigned)g_gekkonet.peer_len;
+
+   g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer,
+         &g_gekkonet.remote_addr);
+
+   if (g_gekkonet.remote_handle < 0)
+   {
+      RARCH_ERR("[GekkoNet] Host failed to add remote actor after peer address was learned.\n");
+      return false;
+   }
+
+   /* Host: request NAT traversal now that we have both actors. */
+   gekkonet_start_nat_traversal(g_gekkonet.listen_port);
+
+   /* Start the session now that both actors are in place. */
+   gekko_start(g_gekkonet.session, &g_gekkonet.config);
+   g_gekkonet.running              = true;
+   g_gekkonet.awaiting_remote_actor= false;
+   g_gekkonet.awaiting_peer_state  = true;
+
+   RARCH_LOG("[GekkoNet] Host added remote actor and started session (port %u).\n",
+         g_gekkonet.listen_port);
+
+   return true;
 }
 
 static bool gekkonet_resolve_remote(const char *server, unsigned port)
@@ -951,6 +1001,13 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       goto error;
    }
 
+   if (is_server && g_gekkonet.awaiting_remote_actor)
+   {
+      RARCH_LOG("[GekkoNet] Host waiting for peer address before starting session (port %u).\n",
+            adapter_port);
+      return true;
+   }
+
    gekko_start(g_gekkonet.session, &g_gekkonet.config);
    g_gekkonet.running = true;
 
@@ -1216,6 +1273,16 @@ bool netplay_driver_ctl(enum rarch_netplay_ctl_state state, void *data)
          ret = true;
          break;
       case RARCH_NETPLAY_CTL_PRE_FRAME:
+         /* Host may need to add the remote actor once a packet arrives. */
+         if (g_gekkonet.awaiting_remote_actor)
+         {
+            gekko_network_poll(g_gekkonet.session);
+            if (gekkonet_try_start_host())
+            {
+               /* Session just started; fall through to normal frame handling next tick. */
+            }
+         }
+
          if (g_gekkonet.running)
          {
             if (g_gekkonet.paused)
