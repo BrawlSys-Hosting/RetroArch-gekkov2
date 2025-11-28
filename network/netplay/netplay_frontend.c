@@ -35,6 +35,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -42,6 +43,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #define closesocket close
+#endif
+
+#ifdef _WIN32
+typedef SOCKET gekkonet_socket_t;
+#define GEKKONET_SOCKET_INVALID(s) ((s) == INVALID_SOCKET)
+#define GEKKONET_INVALID_SOCKET INVALID_SOCKET
+#else
+typedef int gekkonet_socket_t;
+#define GEKKONET_SOCKET_INVALID(s) ((s) < 0)
+#define GEKKONET_INVALID_SOCKET (-1)
 #endif
 
 /* Forward declarations from runloop.c */
@@ -81,7 +92,7 @@ typedef struct gekko_netplay_state
    bool               connect_failed;
    bool               verbose_logging;
    retro_time_t       session_start_time;
-   int                sockfd;
+   gekkonet_socket_t  sockfd;
    struct sockaddr_storage peer_addr;
    socklen_t          peer_len;
    bool               has_peer_addr;
@@ -136,9 +147,29 @@ static bool gekkonet_resolve_remote(const char *server, unsigned port);
 typedef struct gekkonet_udp_adapter
 {
    GekkoNetAdapter api;
-   int sockfd;
+   gekkonet_socket_t sockfd;
    unsigned short bound_port;
 } gekkonet_udp_adapter_t;
+
+#ifdef _WIN32
+static bool gekkonet_winsock_init(void)
+{
+   static bool initialized = false;
+   WSADATA wsa_data;
+
+   if (initialized)
+      return true;
+
+   if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0)
+   {
+      RARCH_ERR("[GekkoNet] WSAStartup failed; code=%d.\n", WSAGetLastError());
+      return false;
+   }
+
+   initialized = true;
+   return true;
+}
+#endif
 
 static void gekkonet_set_peer_addr(const struct sockaddr_storage *addr, socklen_t len)
 {
@@ -154,7 +185,7 @@ static void gekkonet_send_data(GekkoNetAddress* addr, const char* data, int leng
    struct sockaddr_storage target_addr;
    socklen_t target_len = 0;
 
-   if (!data || length <= 0 || g_gekkonet.sockfd < 0)
+   if (!data || length <= 0 || GEKKONET_SOCKET_INVALID(g_gekkonet.sockfd))
       return;
 
    if (addr && addr->data && addr->size <= sizeof(target_addr))
@@ -187,7 +218,7 @@ static GekkoNetResult** gekkonet_receive_data(int* length)
    if (length)
       *length = 0;
 
-   if (g_gekkonet.sockfd < 0)
+   if (GEKKONET_SOCKET_INVALID(g_gekkonet.sockfd))
       return NULL;
 
    memset(results, 0, sizeof(results));
@@ -251,14 +282,37 @@ static void gekkonet_free_data(void* data_ptr)
 static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
 {
    gekkonet_udp_adapter_t *adp = (gekkonet_udp_adapter_t*)calloc(1, sizeof(*adp));
-   struct sockaddr_in addr4;
-   int sockfd;
+   gekkonet_socket_t sockfd;
+   bool ipv6_ok = true;
 
    if (!adp)
       return NULL;
 
-   sockfd = (int)socket(AF_INET, SOCK_DGRAM, 0);
-   if (sockfd < 0)
+#ifdef _WIN32
+   if (!gekkonet_winsock_init())
+   {
+      free(adp);
+      return NULL;
+   }
+#endif
+
+   /* Prefer a dual-stack IPv6 socket so IPv4/IPv6 remotes both work. */
+   sockfd = socket(AF_INET6, SOCK_DGRAM, 0);
+   if (GEKKONET_SOCKET_INVALID(sockfd))
+      ipv6_ok = false;
+
+   if (ipv6_ok)
+   {
+      int no_v6_only = 0;
+      setsockopt(sockfd, IPPROTO_IPV6, IPV6_V6ONLY,
+            (const char*)&no_v6_only, sizeof(no_v6_only));
+   }
+
+   /* Fallback to IPv4 if IPv6 socket creation failed. */
+   if (!ipv6_ok)
+      sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+   if (GEKKONET_SOCKET_INVALID(sockfd))
    {
       free(adp);
       return NULL;
@@ -276,16 +330,33 @@ static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
    }
 #endif
 
-   memset(&addr4, 0, sizeof(addr4));
-   addr4.sin_family      = AF_INET;
-   addr4.sin_addr.s_addr = htonl(INADDR_ANY);
-   addr4.sin_port        = htons(port);
-
-   if (bind(sockfd, (struct sockaddr*)&addr4, sizeof(addr4)) != 0)
    {
-      closesocket(sockfd);
-      free(adp);
-      return NULL;
+      struct sockaddr_storage bind_addr;
+      socklen_t bind_len = 0;
+
+      memset(&bind_addr, 0, sizeof(bind_addr));
+      if (ipv6_ok)
+      {
+         struct sockaddr_in6 *addr6 = (struct sockaddr_in6*)&bind_addr;
+         addr6->sin6_family = AF_INET6;
+         addr6->sin6_port   = htons(port);
+         bind_len = sizeof(struct sockaddr_in6);
+      }
+      else
+      {
+         struct sockaddr_in *addr4 = (struct sockaddr_in*)&bind_addr;
+         addr4->sin_family      = AF_INET;
+         addr4->sin_addr.s_addr = htonl(INADDR_ANY);
+         addr4->sin_port        = htons(port);
+         bind_len = sizeof(struct sockaddr_in);
+      }
+
+      if (bind(sockfd, (struct sockaddr*)&bind_addr, bind_len) != 0)
+      {
+         closesocket(sockfd);
+         free(adp);
+         return NULL;
+      }
    }
 
    adp->sockfd                   = sockfd;
@@ -303,15 +374,15 @@ static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
 
 static void gekkonet_destroy_custom_adapter(void)
 {
-   int sockfd = g_gekkonet.sockfd;
+   gekkonet_socket_t sockfd = g_gekkonet.sockfd;
    GekkoNetAdapter *custom_api =
       g_custom_adapter ? &g_custom_adapter->api : NULL;
 
    /* If state was reset, fall back to the adapter-owned descriptor. */
-   if (sockfd < 0 && g_custom_adapter)
+   if (GEKKONET_SOCKET_INVALID(sockfd) && g_custom_adapter)
       sockfd = g_custom_adapter->sockfd;
 
-   if (sockfd >= 0)
+   if (!GEKKONET_SOCKET_INVALID(sockfd))
       closesocket(sockfd);
 
    if (g_custom_adapter)
@@ -320,7 +391,7 @@ static void gekkonet_destroy_custom_adapter(void)
       g_custom_adapter = NULL;
    }
 
-   g_gekkonet.sockfd        = -1;
+   g_gekkonet.sockfd        = GEKKONET_INVALID_SOCKET;
    if (g_gekkonet.adapter == custom_api)
       g_gekkonet.adapter    = NULL;
    g_gekkonet.has_peer_addr = false;
@@ -358,7 +429,7 @@ static void gekkonet_reset_state(void)
 {
    gekkonet_free_remote_addr();
    memset(&g_gekkonet, 0, sizeof(g_gekkonet));
-   g_gekkonet.sockfd = -1;
+   g_gekkonet.sockfd = GEKKONET_INVALID_SOCKET;
 }
 
 static bool gekkonet_serialize_state(unsigned char *dst,
@@ -412,6 +483,13 @@ static void gekkonet_start_nat_traversal(unsigned short port)
 
 static bool gekkonet_add_actors(bool is_server, const char *server, unsigned port)
 {
+   if (!g_gekkonet.session || !g_gekkonet.adapter)
+   {
+      RARCH_ERR("[GekkoNet] Session or adapter missing before adding actors (session=%p adapter=%p).\n",
+            (void*)g_gekkonet.session, (void*)g_gekkonet.adapter);
+      return false;
+   }
+
    g_gekkonet.local_handle  = -1;
    g_gekkonet.remote_handle = -1;
 
@@ -792,14 +870,20 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
       /* If bound to port 0, fetch the actual port. */
       if (adapter_port == 0)
       {
-         struct sockaddr_in sin;
-         socklen_t slen = sizeof(sin);
-         if (getsockname(g_custom_adapter->sockfd, (struct sockaddr*)&sin, &slen) == 0)
-            adapter_port = ntohs(sin.sin_port);
+         struct sockaddr_storage ss;
+         socklen_t slen = sizeof(ss);
+         if (getsockname(g_custom_adapter->sockfd, (struct sockaddr*)&ss, &slen) == 0)
+         {
+            if (ss.ss_family == AF_INET6)
+               adapter_port = ntohs(((struct sockaddr_in6*)&ss)->sin6_port);
+            else if (ss.ss_family == AF_INET)
+               adapter_port = ntohs(((struct sockaddr_in*)&ss)->sin_port);
+         }
       }
 
       g_gekkonet.adapter     = &g_custom_adapter->api;
       g_gekkonet.listen_port = adapter_port;
+      g_custom_adapter->bound_port = adapter_port;
    }
    g_gekkonet.is_server   = is_server;
    g_gekkonet.inputs_ready= false;
@@ -847,8 +931,9 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    if (!gekkonet_add_actors(is_server, server, port))
    {
-      RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d) with custom adapter.\n",
-            g_gekkonet.local_handle, g_gekkonet.remote_handle);
+      RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d) with custom adapter (sock=%lld port=%u).\n",
+            g_gekkonet.local_handle, g_gekkonet.remote_handle,
+            (long long)g_gekkonet.sockfd, adapter_port);
       goto error;
    }
 
