@@ -109,13 +109,6 @@ static struct gekkonet_udp_adapter *g_custom_adapter;
  * implicit/automatic initialization attempts. */
 static bool g_host_start_requested;
 
-/* The default GekkoNet adapter binds a UDP port when created. We keep a single
- * cached instance alive for the lifetime of RetroArch so we don't attempt to
- * bind the same port more than once when users start/stop sessions repeatedly
- * during the same run (which resulted in `EADDRINUSE`). */
-static GekkoNetAdapter *g_cached_adapter;
-static unsigned short   g_cached_adapter_port;
-
 static uint32_t gekkonet_checksum(const unsigned char *data, unsigned int len)
 {
    /* Lightweight FNV-1a checksum for desync detection. */
@@ -307,6 +300,32 @@ static gekkonet_udp_adapter_t* gekkonet_create_udp_adapter(unsigned short port)
    return adp;
 }
 
+static void gekkonet_destroy_custom_adapter(void)
+{
+   int sockfd = g_gekkonet.sockfd;
+   GekkoNetAdapter *custom_api =
+      g_custom_adapter ? &g_custom_adapter->api : NULL;
+
+   /* If state was reset, fall back to the adapter-owned descriptor. */
+   if (sockfd < 0 && g_custom_adapter)
+      sockfd = g_custom_adapter->sockfd;
+
+   if (sockfd >= 0)
+      closesocket(sockfd);
+
+   if (g_custom_adapter)
+   {
+      free(g_custom_adapter);
+      g_custom_adapter = NULL;
+   }
+
+   g_gekkonet.sockfd        = -1;
+   if (g_gekkonet.adapter == custom_api)
+      g_gekkonet.adapter    = NULL;
+   g_gekkonet.has_peer_addr = false;
+   g_gekkonet.peer_len      = 0;
+}
+
 static void gekkonet_install_callbacks(void)
 {
    if (g_gekkonet.callbacks_installed)
@@ -377,12 +396,6 @@ net_driver_state_t *networking_state_get_ptr(void)
    return &networking_driver_st;
 }
 
-static GekkoNetAdapter *gekkonet_get_adapter(unsigned short port)
-{
-   /* We use a custom UDP adapter that we own so we can observe peers. */
-   return NULL;
-}
-
 static void gekkonet_start_nat_traversal(unsigned short port)
 {
    net_driver_state_t *net_st = networking_state_get_ptr();
@@ -394,6 +407,33 @@ static void gekkonet_start_nat_traversal(unsigned short port)
       RARCH_WARN("[GekkoNet] NAT traversal setup failed to start.\n");
    else
       RARCH_LOG("[GekkoNet] NAT traversal requested for port %u.\n", port);
+}
+
+static bool gekkonet_add_actors(bool is_server, const char *server, unsigned port)
+{
+   g_gekkonet.local_handle  = -1;
+   g_gekkonet.remote_handle = -1;
+
+   g_gekkonet.local_handle  = gekko_add_actor(g_gekkonet.session, LocalPlayer, NULL);
+
+   if (g_gekkonet.local_handle < 0)
+      return false;
+
+   if (is_server)
+   {
+      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer, NULL);
+      if (g_gekkonet.remote_handle >= 0)
+         gekkonet_start_nat_traversal((unsigned short)port);
+      return g_gekkonet.remote_handle >= 0;
+   }
+
+   if (!g_gekkonet.remote_addr.data && !gekkonet_resolve_remote(server, port))
+      return false;
+
+   g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer,
+         &g_gekkonet.remote_addr);
+
+   return g_gekkonet.remote_handle >= 0;
 }
 
 static bool gekkonet_resolve_remote(const char *server, unsigned port)
@@ -714,6 +754,7 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    unsigned short adapter_port  = (unsigned short)port;
 
    gekkonet_reset_state();
+   gekkonet_destroy_custom_adapter();
 
    /* GekkoNet needs one local + one remote player. Ensure we always allocate
     * for at least two slots even if the frontend is configured for a single
@@ -740,16 +781,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    }
 
    {
-      if (g_custom_adapter)
-      {
-         free(g_custom_adapter);
-         g_custom_adapter = NULL;
-      }
       g_custom_adapter = gekkonet_create_udp_adapter(adapter_port);
       if (!g_custom_adapter)
       {
          RARCH_ERR("[GekkoNet] Failed to create UDP adapter on port %u.\n", adapter_port);
-         return false;
+         goto error;
       }
 
       /* If bound to port 0, fetch the actual port. */
@@ -808,31 +844,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
 
    gekko_net_adapter_set(g_gekkonet.session, g_gekkonet.adapter);
 
-   g_gekkonet.local_handle  = gekko_add_actor(g_gekkonet.session, LocalPlayer, NULL);
-
-   if (is_server)
-   {
-      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer, NULL);
-      /* Request NAT traversal for hosts to publish external mapping. */
-      gekkonet_start_nat_traversal((unsigned short)port);
-   }
-   else
-   {
-      if (!gekkonet_resolve_remote(server, port))
-      {
-         RARCH_ERR("[GekkoNet] Unable to resolve remote host for client session.\n");
-         return false;
-      }
-
-      g_gekkonet.remote_handle = gekko_add_actor(g_gekkonet.session, RemotePlayer,
-            &g_gekkonet.remote_addr);
-   }
-
-   if (g_gekkonet.local_handle < 0 || g_gekkonet.remote_handle < 0)
+   if (!gekkonet_add_actors(is_server, server, port))
    {
       RARCH_ERR("[GekkoNet] Failed to add actors (local=%d remote=%d) with custom adapter.\n",
             g_gekkonet.local_handle, g_gekkonet.remote_handle);
-      return false;
+      goto error;
    }
 
    gekko_start(g_gekkonet.session, &g_gekkonet.config);
@@ -842,6 +858,13 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
          is_server ? "host" : "client");
 
    return true;
+
+error:
+   if (g_gekkonet.session)
+      gekko_destroy(g_gekkonet.session);
+   gekkonet_destroy_custom_adapter();
+   gekkonet_reset_state();
+   return false;
 }
 
 static void gekkonet_shutdown(void)
@@ -849,19 +872,10 @@ static void gekkonet_shutdown(void)
    if (g_gekkonet.adapter || g_gekkonet.session)
       RARCH_LOG("[GekkoNet] Shutting down session.\n");
 
-   if (g_gekkonet.sockfd >= 0)
-   {
-      closesocket(g_gekkonet.sockfd);
-      g_gekkonet.sockfd = -1;
-   }
-
    if (g_gekkonet.session)
       gekko_destroy(g_gekkonet.session);
-   if (g_custom_adapter)
-   {
-      free(g_custom_adapter);
-      g_custom_adapter = NULL;
-   }
+
+   gekkonet_destroy_custom_adapter();
 
    gekkonet_uninstall_callbacks();
    gekkonet_free_remote_addr();
