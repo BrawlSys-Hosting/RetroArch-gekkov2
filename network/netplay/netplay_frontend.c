@@ -129,6 +129,7 @@ static unsigned gekkonet_local_port(void)
 }
 
 static uint16_t gekkonet_read_buttons(void);
+static bool gekkonet_resolve_remote(const char *server, unsigned port);
 
 /* ------------------------------------------------------------------------- */
 /* Custom UDP adapter we own so we can observe endpoints. */
