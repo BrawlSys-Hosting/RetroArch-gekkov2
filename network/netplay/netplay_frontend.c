@@ -835,6 +835,11 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    gekkonet_reset_state();
    gekkonet_destroy_custom_adapter();
 
+#ifdef _WIN32
+   if (!gekkonet_winsock_init())
+      return false;
+#endif
+
    /* GekkoNet needs one local + one remote player. Ensure we always allocate
     * for at least two slots even if the frontend is configured for a single
     * local user. */
@@ -853,9 +858,9 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    /* Use a modest default to avoid huge allocations on 32-bit builds. */
    fallback_state_sz = 32 * 1024 * 1024; /* 32 MiB default */
 
-   if (!gekko_create(&g_gekkonet.session))
+   if (!gekko_create(&g_gekkonet.session) || !g_gekkonet.session)
    {
-      RARCH_ERR("[GekkoNet] Failed to create session.\n");
+      RARCH_ERR("[GekkoNet] Failed to create session (session=%p).\n", (void*)g_gekkonet.session);
       return false;
    }
 
