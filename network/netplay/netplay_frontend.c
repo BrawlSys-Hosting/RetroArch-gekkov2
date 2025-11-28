@@ -850,8 +850,8 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    else
       RARCH_WARN("[GekkoNet] Core serialization size unavailable; using fallback buffer.\n");
 
-   /* Use a generous default to cover large core states. Ignore tiny rewind buffers. */
-   fallback_state_sz = 128 * 1024 * 1024; /* 128 MiB default */
+   /* Use a modest default to avoid huge allocations on 32-bit builds. */
+   fallback_state_sz = 32 * 1024 * 1024; /* 32 MiB default */
 
    if (!gekko_create(&g_gekkonet.session))
    {
@@ -904,9 +904,18 @@ static bool gekkonet_init_session(bool is_server, const char *server, unsigned p
    g_gekkonet.config.spectator_delay         = 0;
    g_gekkonet.config.input_size              = sizeof(uint16_t) + sizeof(int16_t) * 2;
    {
-      size_t chosen_sz = serialize_sz;
-      if (fallback_state_sz > chosen_sz)
+      const size_t max_state_sz = 64 * 1024 * 1024; /* 64 MiB safety cap */
+      size_t chosen_sz = serialize_sz ? serialize_sz : fallback_state_sz;
+
+      if (chosen_sz < fallback_state_sz)
          chosen_sz = fallback_state_sz;
+      if (chosen_sz > max_state_sz)
+      {
+         RARCH_WARN("[GekkoNet] Clamping state buffer from %u to %u bytes to avoid oversized allocation.\n",
+               (unsigned)chosen_sz, (unsigned)max_state_sz);
+         chosen_sz = max_state_sz;
+      }
+
       g_gekkonet.config.state_size = (unsigned)chosen_sz;
       if (serialize_sz)
          RARCH_LOG("[GekkoNet] State buffer set to %u bytes (serialize size %u, fallback %u).\n",
